@@ -13,7 +13,7 @@ var Separator = []byte("\r\n")
 const (
 	CommandStart = iota
 	BulkStringLen
-	BulkString
+	BulkStringBody
 	Array
 )
 
@@ -83,12 +83,12 @@ func ParseRESPCommand(reader *bufio.Reader, ctx *ParserContext) error {
 			return err
 		}
 		err = readCommandStart(cmd, ctx)
-		if err != nil {
+		if err != nil || ctx.bulkStrLen <= 0 || ctx.state != BulkStringBody {
 			fmt.Println("Failed to read bulk string len:", err)
 			return err
 		}
 		return ParseRESPCommand(reader, ctx)
-	case BulkString:
+	case BulkStringBody:
 		cmd, err := readNextCmdFixedLength(reader, ctx.bulkStrLen)
 		if err != nil {
 			fmt.Println("Failed to read command:", err)
@@ -154,7 +154,7 @@ func readCommandStart(cmd []byte, ctx *ParserContext) error {
 			return fmt.Errorf("failed to read command length: %v", err)
 		}
 		ctx.bulkStrLen = length
-		ctx.state = BulkString
+		ctx.state = BulkStringBody
 		return nil
 	case '*': // Array
 		length, err := getLengthInHeader(cmd)
