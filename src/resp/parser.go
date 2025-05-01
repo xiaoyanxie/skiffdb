@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 )
 
@@ -67,37 +68,42 @@ func ParseRESPCommand(reader *bufio.Reader, ctx *ParserContext) error {
 	case CommandStart:
 		cmd, err := readNextCmd(reader)
 		if err != nil {
-			fmt.Println("Failed to read command:", err)
+			log.Println("Failed to read command:", err)
 			return err
+		}
+		if string(cmd) == "PING" {
+			_ = ctx.initCmdArgs(1)
+			_ = ctx.setArg("PING")
+			return nil
 		}
 		err = readCommandStart(cmd, ctx)
 		if err != nil {
-			fmt.Println("Failed to read command:", err)
+			log.Println("Failed to read command:", err)
 			return err
 		}
 		return ParseRESPCommand(reader, ctx)
 	case BulkStringLen:
 		cmd, err := readNextCmd(reader)
 		if err != nil {
-			fmt.Println("Failed to read command:", err)
+			log.Println("Failed to read command:", err)
 			return err
 		}
 		err = readCommandStart(cmd, ctx)
 		if err != nil || ctx.bulkStrLen <= 0 || ctx.state != BulkStringBody {
-			fmt.Println("Failed to read bulk string len:", err)
+			log.Println("Failed to read bulk string len:", err)
 			return err
 		}
 		return ParseRESPCommand(reader, ctx)
 	case BulkStringBody:
 		cmd, err := readNextCmdFixedLength(reader, ctx.bulkStrLen)
 		if err != nil {
-			fmt.Println("Failed to read command:", err)
+			log.Println("Failed to read command:", err)
 			return err
 		}
 		str := string(cmd)
 		err = ctx.setArg(str)
 		if err != nil {
-			fmt.Println("Failed to set argument:", err)
+			log.Println("Failed to set argument:", err)
 			return err
 		}
 		return nil
@@ -106,7 +112,7 @@ func ParseRESPCommand(reader *bufio.Reader, ctx *ParserContext) error {
 			ctx.state = BulkStringLen
 			err := ParseRESPCommand(reader, ctx)
 			if err != nil {
-				fmt.Println("Failed to read bulk string in array:", err)
+				log.Println("Failed to read bulk string in array:", err)
 				return err
 			}
 		}

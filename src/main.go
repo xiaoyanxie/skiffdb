@@ -2,11 +2,12 @@ package main
 
 import (
 	"bufio"
-	"fmt"
+	"io"
 	"kvdb/src/core"
 	"kvdb/src/resp"
 	"log"
 	"net"
+	"strings"
 )
 
 const InvalidCommand = "-ERROR Invalid command\r\n"
@@ -23,9 +24,10 @@ func main() {
 		}
 	}(ln)
 
-	fmt.Println("Server listening on :6379")
+	log.Println("Server listening on :6379")
 	for {
 		conn, err := ln.Accept()
+		log.Println("Accepted connection from:", conn.RemoteAddr())
 		if err != nil {
 			log.Println("Failed to accept connection:", err)
 			continue
@@ -47,51 +49,35 @@ func handleConnection(conn net.Conn) {
 	for {
 		err := resp.ParseRESPCommand(reader, parserContext)
 		if err != nil {
-			writeErrorResponse(conn)
-			return
+			if err == io.EOF {
+				log.Println("Client closed connection")
+				return
+			}
+			log.Println(err)
+			writeResponse(conn, InvalidCommand)
+			continue
 		}
 
 		cmdArgs := parserContext.CmdArgs
-		fmt.Println(cmdArgs)
 		parserContext.Reset()
 
-		ret, retType, err := core.ExecuteCmd(cmdArgs)
+		ret, err := core.ExecuteCmd(cmdArgs)
 		if err != nil {
-			writeErrorResponse(conn)
-			return
+			log.Println(err)
+			writeResponse(conn, InvalidCommand)
+			continue
 		}
-		writeResponse(conn, ret, retType)
+		writeResponse(conn, ret)
 	}
 }
 
-func writeResponse(conn net.Conn, result string, retType int) {
-	// RESP Response format:
-	//   Type	             Prefix	Example
-	//   Simple String	     +	    +OK\r\n
-	//   Error	             -	    -ERROR msg\r\n
-	//   Integer	         :	    :1000\r\n
-	//   Bulk String	     $	    $6\r\nfoobar\r\n
-	//   Array	             *	    *2\r\n$3\r\nGET\r\n$3\r\nkey\r\n
-	//   Null Bulk String    $-1    $-1\r\n
-	//   Null Array	         *-1    *-1\r\n
-
-	var retStr string
-	switch retType {
-	case core.BulkString:
-		retStr = fmt.Sprintf("$%d\r\n%s\r\n", len(result), result)
-	default:
-		retStr = "TEST_RESPONSE"
-	}
-
-	_, err := conn.Write([]byte(retStr))
-	if err != nil {
+func writeResponse(conn net.Conn, result string) {
+	_, err := conn.Write([]byte(result))
+	if err != nil && !isBrokenPipe(err) {
 		log.Println("Connection error:", err)
 	}
 }
 
-func writeErrorResponse(conn net.Conn) {
-	_, err := conn.Write([]byte(InvalidCommand))
-	if err != nil {
-		log.Println("Connection error:", err)
-	}
+func isBrokenPipe(err error) bool {
+	return strings.Contains(err.Error(), "broken pipe") || strings.Contains(err.Error(), "connection reset")
 }
