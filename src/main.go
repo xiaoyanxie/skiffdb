@@ -3,7 +3,8 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"kvdb/src/parser"
+	"kvdb/src/core"
+	"kvdb/src/resp"
 	"log"
 	"net"
 )
@@ -42,17 +43,55 @@ func handleConnection(conn net.Conn) {
 	}(conn)
 
 	reader := bufio.NewReader(conn)
-	parserContext := parser.InitParserContext()
+	parserContext := resp.InitParserContext()
 	for {
-		err := parser.ParseRESPCommand(reader, parserContext)
+		err := resp.ParseRESPCommand(reader, parserContext)
 		if err != nil {
-			_, err := conn.Write([]byte(InvalidCommand))
-			if err != nil {
-				log.Println("Connection error:", err)
-				return
-			}
+			writeErrorResponse(conn)
+			return
 		}
-		fmt.Println(parserContext.CmdArgs)
+
+		cmdArgs := parserContext.CmdArgs
+		fmt.Println(cmdArgs)
 		parserContext.Reset()
+
+		ret, retType, err := core.ExecuteCmd(cmdArgs)
+		if err != nil {
+			writeErrorResponse(conn)
+			return
+		}
+		writeResponse(conn, ret, retType)
+	}
+}
+
+func writeResponse(conn net.Conn, result string, retType int) {
+	// RESP Response format:
+	//   Type	             Prefix	Example
+	//   Simple String	     +	    +OK\r\n
+	//   Error	             -	    -ERROR msg\r\n
+	//   Integer	         :	    :1000\r\n
+	//   Bulk String	     $	    $6\r\nfoobar\r\n
+	//   Array	             *	    *2\r\n$3\r\nGET\r\n$3\r\nkey\r\n
+	//   Null Bulk String    $-1    $-1\r\n
+	//   Null Array	         *-1    *-1\r\n
+
+	var retStr string
+	switch retType {
+	case core.BulkString:
+		retStr = fmt.Sprintf("$%d\r\n%s\r\n", len(result), result)
+	default:
+		retStr = "TEST_RESPONSE"
+	}
+
+	_, err := conn.Write([]byte(retStr))
+	if err != nil {
+		log.Println("Connection error:", err)
+	}
+}
+
+func writeErrorResponse(conn net.Conn) {
+	_, err := conn.Write([]byte(InvalidCommand))
+	if err != nil {
+		log.Println("Connection error:", err)
 	}
 }

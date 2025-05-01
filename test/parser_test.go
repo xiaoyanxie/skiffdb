@@ -3,7 +3,7 @@ package test
 import (
 	"bufio"
 	"fmt"
-	"kvdb/src/parser"
+	"kvdb/src/resp"
 	"strings"
 	"testing"
 )
@@ -11,9 +11,9 @@ import (
 func TestParseRESPCommand(t *testing.T) {
 	type args struct {
 		reader *bufio.Reader
-		ctx    *parser.ParserContext
+		ctx    *resp.ParserContext
 	}
-	ctx := parser.InitParserContext()
+	ctx := resp.InitParserContext()
 	tests := []struct {
 		name     string
 		args     args
@@ -77,7 +77,7 @@ func TestParseRESPCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.args.ctx.Reset()
-			if err := parser.ParseRESPCommand(tt.args.reader, tt.args.ctx); (err != nil) != tt.wantErr {
+			if err := resp.ParseRESPCommand(tt.args.reader, tt.args.ctx); (err != nil) != tt.wantErr {
 				t.Errorf("ParseRESPCommand() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			result := tt.args.ctx.CmdArgs
