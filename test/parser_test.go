@@ -24,7 +24,7 @@ func TestParseRESPCommand(t *testing.T) {
 		{
 			name: "valid PING command",
 			args: args{
-				reader: bufio.NewReader(strings.NewReader("*2\r\n$4\r\nPING\r\n$4\r\ntest\r\n")),
+				reader: bufio.NewReader(strings.NewReader(resp.BuildArray(&[]string{"PING", "test"}))),
 				ctx:    ctx,
 			},
 			wantErr:  false,
@@ -33,7 +33,7 @@ func TestParseRESPCommand(t *testing.T) {
 		{
 			name: "valid SET command 1",
 			args: args{
-				reader: bufio.NewReader(strings.NewReader("*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n")),
+				reader: bufio.NewReader(strings.NewReader(resp.BuildArray(&[]string{"SET", "key", "value"}))),
 				ctx:    ctx,
 			},
 			wantErr:  false,
@@ -42,7 +42,7 @@ func TestParseRESPCommand(t *testing.T) {
 		{
 			name: "valid command with multiline BulkString",
 			args: args{
-				reader: bufio.NewReader(strings.NewReader("*3\r\n$4\r\n\nSET\r\n$5\r\n\nke\ny\r\n$8\r\nv\ral\nue\n\r\n")),
+				reader: bufio.NewReader(strings.NewReader(resp.BuildArray(&[]string{"\nSET", "\nke\ny", "v\ral\nue\n"}))),
 				ctx:    ctx,
 			},
 			wantErr:  false,
@@ -67,11 +67,29 @@ func TestParseRESPCommand(t *testing.T) {
 		{
 			name: "valid SET command 2",
 			args: args{
-				reader: bufio.NewReader(strings.NewReader("*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n")),
+				reader: bufio.NewReader(strings.NewReader(resp.BuildArray(&[]string{"SET", "key", "value"}))),
 				ctx:    ctx,
 			},
 			wantErr:  false,
 			expected: []string{"SET", "key", "value"},
+		},
+		{
+			name: "valid GET command",
+			args: args{
+				reader: bufio.NewReader(strings.NewReader(resp.BuildArray(&[]string{"GET", "a"}))),
+				ctx:    ctx,
+			},
+			wantErr:  false,
+			expected: []string{"GET", "a"},
+		},
+		{
+			name: "invalid GET command",
+			args: args{
+				reader: bufio.NewReader(strings.NewReader(resp.BuildArray(&[]string{"GET"}))),
+				ctx:    ctx,
+			},
+			wantErr:  false,
+			expected: []string{"GET"},
 		},
 	}
 	for _, tt := range tests {

@@ -48,6 +48,9 @@ func handleConnection(conn net.Conn) {
 	parserContext := resp.InitParserContext()
 	for {
 		err := resp.ParseRESPCommand(reader, parserContext)
+		cmdArgs := parserContext.CmdArgs
+		parserContext.Reset()
+
 		if err != nil {
 			if err == io.EOF {
 				log.Println("Client closed connection")
@@ -58,10 +61,7 @@ func handleConnection(conn net.Conn) {
 			continue
 		}
 
-		cmdArgs := parserContext.CmdArgs
-		parserContext.Reset()
-
-		ret, err := core.ExecuteCmd(cmdArgs)
+		ret := core.ExecuteCmd(cmdArgs)
 		if err != nil {
 			log.Println(err)
 			writeResponse(conn, InvalidCommand)

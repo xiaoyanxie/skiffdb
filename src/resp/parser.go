@@ -71,11 +71,6 @@ func ParseRESPCommand(reader *bufio.Reader, ctx *ParserContext) error {
 			log.Println("Failed to read command:", err)
 			return err
 		}
-		if string(cmd) == "PING" {
-			_ = ctx.initCmdArgs(1)
-			_ = ctx.setArg("PING")
-			return nil
-		}
 		err = readCommandStart(cmd, ctx)
 		if err != nil {
 			log.Println("Failed to read command:", err)
@@ -123,7 +118,7 @@ func ParseRESPCommand(reader *bufio.Reader, ctx *ParserContext) error {
 }
 
 func readNextCmd(reader *bufio.Reader) ([]byte, error) {
-	cmd, err := reader.ReadSlice('\n')
+	cmd, err := reader.ReadBytes('\n')
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +137,7 @@ func readNextCmdFixedLength(reader *bufio.Reader, length int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(cmd) < 4 {
+	if len(cmd) < 2 {
 		return nil, fmt.Errorf("command too short: %d", len(cmd))
 	}
 	if !bytes.HasSuffix(cmd, Separator) {

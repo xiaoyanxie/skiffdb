@@ -1,45 +1,64 @@
 package core
 
 import (
-	"errors"
-	"fmt"
+	"kvdb/src/resp"
 	"log"
 )
 
-//const (
-//	SimpleString = iota
-//	Error
-//	Integer
-//	BulkString
-//	Array
-//	NullBulkString
-//	NullArray
-//)
+var memdb = MemDB{}
 
-func ExecuteCmd(cmdArgs []string) (string, error) {
-	// RESP Response format:
-	//   Type	             Prefix	Example
-	//   Simple String	     +	    +OK\r\n
-	//   Error	             -	    -ERROR msg\r\n
-	//   Integer	         :	    :1000\r\n
-	//   Bulk String	     $	    $6\r\nfoobar\r\n
-	//   Array	             *	    *2\r\n$3\r\nGET\r\n$3\r\nkey\r\n
-	//   Null Bulk String    $-1    $-1\r\n
-	//   Null Array	         *-1    *-1\r\n
+func init() {
+	memdb.Init()
+}
 
+func ResetMemDB() {
+	memdb.Init()
+}
+
+func ExecuteCmd(cmdArgs []string) string {
 	log.Printf("Executing command: %s\n", cmdArgs)
 	if len(cmdArgs) < 1 {
-		return "", errors.New("no command specified")
+		return resp.BuildErrorMsg(resp.ErrGeneric, "No command specified")
 	}
 	switch cmdArgs[0] {
 	case "PING":
-		if len(cmdArgs) != 1 {
-			return "", fmt.Errorf("unsupported command: %s", cmdArgs)
+		if len(cmdArgs) == 1 {
+			return resp.BuildSimpleString("PONG")
 		}
-		ret := "PONG"
-		return fmt.Sprintf("$%d\r\n%s\r\n", len(ret), ret), nil
+		return resp.BuildBulkString(&cmdArgs[1])
+	case "SET":
+		if len(cmdArgs) != 3 {
+			resp.BuildErrorMsg(resp.ErrGeneric, "SET expects 1 argument")
+		}
+		memdb.Set(cmdArgs[1], cmdArgs[2])
+		return resp.BuildSimpleString("OK")
+	case "GET":
+		if len(cmdArgs) != 2 {
+			resp.BuildErrorMsg(resp.ErrGeneric, "GET expects 1 argument")
+		}
+		return resp.BuildBulkString(memdb.Get(cmdArgs[1]))
+	case "DEL":
+		if len(cmdArgs) != 2 {
+			resp.BuildErrorMsg(resp.ErrGeneric, "DEL expects 1 argument")
+		}
+		memdb.Delete(cmdArgs[1])
+		return resp.BuildSimpleString("OK")
+	case "INCR":
+		if len(cmdArgs) != 2 {
+			resp.BuildErrorMsg(resp.ErrGeneric, "INCR expects 1 argument")
+		}
+		err := memdb.Incr(cmdArgs[1])
+		if err != nil {
+			return resp.BuildErrorMsg(resp.ErrWrongType, err.Error())
+		}
+		return resp.BuildSimpleString("OK")
+	case "EXISTS":
+		if len(cmdArgs) < 2 {
+			resp.BuildErrorMsg(resp.ErrGeneric, "EXISTS expects at least 1 argument")
+		}
+		cnt := memdb.CountKeys(cmdArgs[1:])
+		return resp.BuildInteger(cnt)
 	default:
-		ret := "TEST_RESPONSE"
-		return fmt.Sprintf("$%d\r\n%s\r\n", len(ret), ret), nil
+		return resp.BuildErrorMsg(resp.ErrGeneric, "Unsupported")
 	}
 }
