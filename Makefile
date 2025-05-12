@@ -7,7 +7,7 @@ BUILD_DIR := bin
 GO       := go
 GOFILES  := $(shell find . -type f -name '*.go')
 
-.PHONY: all build clean run
+.PHONY: all build clean run test
 
 all: build
 
@@ -21,6 +21,9 @@ build: tidy
 run: build
 	@echo "🚀 Running $(APP_NAME)..."
 	./$(BUILD_DIR)/$(APP_NAME)
+
+test:
+	go test -v ./test/...
 
 clean:
 	@echo "🧹 Cleaning up..."
