@@ -54,7 +54,7 @@ func TestExecuteCmd(t *testing.T) {
 				{"SET", "a", "6c"},
 			},
 			args: args{cmdArgs: []string{"INCR", "a"}},
-			want: resp.BuildErrorMsg(resp.ErrWrongType, "INCR expects a number, got 6c"),
+			want: resp.BuildErrorMsg(resp.ErrWrongType, "Wrong data type"),
 		},
 		{
 			name: "EXISTS keys",
