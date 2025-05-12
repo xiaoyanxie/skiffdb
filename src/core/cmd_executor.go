@@ -3,6 +3,7 @@ package core
 import (
 	"kvdb/src/resp"
 	"log"
+	"strconv"
 )
 
 var memdb = MemDB{}
@@ -18,47 +19,129 @@ func ResetMemDB() {
 func ExecuteCmd(cmdArgs []string) string {
 	log.Printf("Executing command: %s\n", cmdArgs)
 	if len(cmdArgs) < 1 {
-		return resp.BuildErrorMsg(resp.ErrGeneric, "No command specified")
+		return resp.ErrNoCommandSpecified
 	}
 	switch cmdArgs[0] {
+	/****************   Core commands   ****************/
+	//	Command		Description
+	//	PING		Used for connectivity check (redis-cli ping)
+	//	SET			Set a key with a value
+	//	GET			Get a value by key
+	//	DEL			Delete a single key
+	//	EXISTS		Check presence of keys
 	case "PING":
 		if len(cmdArgs) == 1 {
-			return resp.BuildSimpleString("PONG")
+			return resp.Pong
 		}
 		return resp.BuildBulkString(&cmdArgs[1])
 	case "SET":
 		if len(cmdArgs) != 3 {
-			resp.BuildErrorMsg(resp.ErrGeneric, "SET expects 1 argument")
+			return resp.ErrCommandFormatError
 		}
 		memdb.Set(cmdArgs[1], cmdArgs[2])
-		return resp.BuildSimpleString("OK")
+		return resp.Ok
 	case "GET":
 		if len(cmdArgs) != 2 {
-			resp.BuildErrorMsg(resp.ErrGeneric, "GET expects 1 argument")
+			return resp.ErrCommandFormatError
 		}
 		return resp.BuildBulkString(memdb.Get(cmdArgs[1]))
 	case "DEL":
 		if len(cmdArgs) != 2 {
-			resp.BuildErrorMsg(resp.ErrGeneric, "DEL expects 1 argument")
+			return resp.ErrCommandFormatError
 		}
 		memdb.Delete(cmdArgs[1])
-		return resp.BuildSimpleString("OK")
-	case "INCR":
-		if len(cmdArgs) != 2 {
-			resp.BuildErrorMsg(resp.ErrGeneric, "INCR expects 1 argument")
-		}
-		err := memdb.Incr(cmdArgs[1])
-		if err != nil {
-			return resp.BuildErrorMsg(resp.ErrWrongType, err.Error())
-		}
-		return resp.BuildSimpleString("OK")
+		return resp.Ok
 	case "EXISTS":
 		if len(cmdArgs) < 2 {
-			resp.BuildErrorMsg(resp.ErrGeneric, "EXISTS expects at least 1 argument")
+			return resp.ErrCommandFormatError
 		}
 		cnt := memdb.CountKeys(cmdArgs[1:])
 		return resp.BuildInteger(cnt)
-	default:
-		return resp.BuildErrorMsg(resp.ErrGeneric, "Unsupported")
+
+	/**************** Numeric commands  ****************/
+	//	Command		Description
+	//	INCR		Used for counters, IDs
+	//	DECR		Similar use case
+	//	INCRBY		More general than INCR
+	case "INCR":
+		if len(cmdArgs) != 2 {
+			return resp.ErrCommandFormatError
+		}
+		err := memdb.Incr(cmdArgs[1], 1)
+		if err != nil {
+			return resp.ErrWrongDataType
+		}
+		return resp.Ok
+	case "DECR":
+		if len(cmdArgs) != 2 {
+			return resp.ErrCommandFormatError
+		}
+		err := memdb.Incr(cmdArgs[1], -1)
+		if err != nil {
+			return resp.ErrWrongDataType
+		}
+		return resp.Ok
+	case "INCRBY":
+		if len(cmdArgs) != 3 {
+			return resp.ErrCommandFormatError
+		}
+		delta, err := strconv.Atoi(cmdArgs[2])
+		if err != nil {
+			return resp.ErrCommandFormatError
+		}
+		err = memdb.Incr(cmdArgs[1], delta)
+		if err != nil {
+			return resp.ErrWrongDataType
+		}
+		return resp.Ok
+
+	/*********** Time-to-Live (TTL) Commands ***********/
+	//	Command		Description
+	//	EXPIRE		Set a key with a expiration time
+	//	TTL			Get the key's remaining expiration time
+	case "TTL":
+		// TODO: implement TTL
+	case "EXPIRE":
+		// TODO: implement EXPIRE
+
+	/****************** Hash commands  *****************/
+	//	Command		Description
+	//	HSET		Used for objects/maps (e.g., user profiles)
+	//	HGET		Pair to HSET
+	case "HSET":
+		// TODO: implement HSET
+	case "HGET":
+		// TODO: implement HGET
+
+	/****************** List commands  *****************/
+	//	Command		Description
+	//	LPUSH		Used for queues, logs, streams
+	//	LRANGE		Read from lists
+	case "LPUSH":
+		// TODO: implement LPUSH
+	case "LRANGE":
+		// TODO: implement LRANGE
+
+	/****************  ZSET operations  ****************/
+	//	Command					Description
+	//	ZADD					Add/update members with scores
+	//	ZSCORE					Get score of a member
+	//	ZRANGE					Get members by rank (ascending order)
+	//	ZREVRANGE				Get members by rank (descending order)
+	//	ZRANGEBYSCORE			Get members by score range (low → high)
+	//	ZRANK					Get rank (index) of a member
+	//	ZREM					Remove one or more members
+	//	ZINCRBY					Increment the score of a member
+	// TODO: implement ZSET operations
+
+	/******************* Persistence *******************/
+	//	Command					Description
+	//	SAVE					Manual backup, used in testing/debugging
+	//	FLUSHDB					Used in dev/testing to clear data
+	case "SAVE":
+		// TODO: implement SAVE
+	case "FLUSHDB":
+		// TODO: implement FLUSHDB
 	}
+	return resp.ErrCommandUnsupported
 }

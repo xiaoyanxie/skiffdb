@@ -79,3 +79,10 @@ func BuildArray(value *[]string) string {
 	}
 	return b.String()
 }
+
+var Ok = BuildSimpleString("OK")
+var Pong = BuildSimpleString("PONG")
+var ErrNoCommandSpecified = BuildErrorMsg(ErrGeneric, "No command specified")
+var ErrCommandFormatError = BuildErrorMsg(ErrGeneric, "Command format error")
+var ErrWrongDataType = BuildErrorMsg(ErrWrongType, "Wrong data type")
+var ErrCommandUnsupported = BuildErrorMsg(ErrGeneric, "Command Unsupported")

@@ -36,6 +36,7 @@ func (ctx *ParserContext) initCmdArgs(length int) error {
 	if length < 0 {
 		return fmt.Errorf("invalid array length: %d", length)
 	}
+	// TODO: This allocates memory for each request. Can be optimized.
 	ctx.CmdArgs = make([]string, length)
 	ctx.index = 0
 	return nil
