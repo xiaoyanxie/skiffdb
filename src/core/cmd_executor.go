@@ -1,9 +1,10 @@
 package core
 
 import (
-	"kvdb/src/resp"
-	"log"
-	"strconv"
+    "kvdb/src/resp"
+    "log"
+    "strconv"
+    "time"
 )
 
 var memdb = MemDB{}
@@ -38,6 +39,16 @@ func ExecuteCmd(cmdArgs []string) string {
 		if len(cmdArgs) != 3 {
 			return resp.ErrCommandFormatError
 		}
+		if RaftEnabled() {
+			if !IsLeader() {
+				return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
+			}
+			_, err := ApplyOperation(Operation{Op: "SET", Key: cmdArgs[1], Value: cmdArgs[2]}, 5*time.Second)
+			if err != nil {
+				return resp.BuildErrorMsg(resp.ErrGeneric, err.Error())
+			}
+			return resp.Ok
+		}
 		memdb.Set(cmdArgs[1], cmdArgs[2])
 		return resp.Ok
 	case "GET":
@@ -48,6 +59,16 @@ func ExecuteCmd(cmdArgs []string) string {
 	case "DEL":
 		if len(cmdArgs) != 2 {
 			return resp.ErrCommandFormatError
+		}
+		if RaftEnabled() {
+			if !IsLeader() {
+				return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
+			}
+			_, err := ApplyOperation(Operation{Op: "DEL", Key: cmdArgs[1]}, 5*time.Second)
+			if err != nil {
+				return resp.BuildErrorMsg(resp.ErrGeneric, err.Error())
+			}
+			return resp.Ok
 		}
 		memdb.Delete(cmdArgs[1])
 		return resp.Ok
@@ -67,6 +88,16 @@ func ExecuteCmd(cmdArgs []string) string {
 		if len(cmdArgs) != 2 {
 			return resp.ErrCommandFormatError
 		}
+		if RaftEnabled() {
+			if !IsLeader() {
+				return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
+			}
+			_, err := ApplyOperation(Operation{Op: "INCR", Key: cmdArgs[1], Delta: 1}, 5*time.Second)
+			if err != nil {
+				return resp.ErrWrongDataType
+			}
+			return resp.Ok
+		}
 		err := memdb.Incr(cmdArgs[1], 1)
 		if err != nil {
 			return resp.ErrWrongDataType
@@ -75,6 +106,16 @@ func ExecuteCmd(cmdArgs []string) string {
 	case "DECR":
 		if len(cmdArgs) != 2 {
 			return resp.ErrCommandFormatError
+		}
+		if RaftEnabled() {
+			if !IsLeader() {
+				return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
+			}
+			_, err := ApplyOperation(Operation{Op: "INCR", Key: cmdArgs[1], Delta: -1}, 5*time.Second)
+			if err != nil {
+				return resp.ErrWrongDataType
+			}
+			return resp.Ok
 		}
 		err := memdb.Incr(cmdArgs[1], -1)
 		if err != nil {
@@ -88,6 +129,16 @@ func ExecuteCmd(cmdArgs []string) string {
 		delta, err := strconv.Atoi(cmdArgs[2])
 		if err != nil {
 			return resp.ErrCommandFormatError
+		}
+		if RaftEnabled() {
+			if !IsLeader() {
+				return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
+			}
+			_, err := ApplyOperation(Operation{Op: "INCR", Key: cmdArgs[1], Delta: delta}, 5*time.Second)
+			if err != nil {
+				return resp.ErrWrongDataType
+			}
+			return resp.Ok
 		}
 		err = memdb.Incr(cmdArgs[1], delta)
 		if err != nil {
@@ -139,7 +190,14 @@ func ExecuteCmd(cmdArgs []string) string {
 	//	SAVE					Manual backup, used in testing/debugging
 	//	FLUSHDB					Used in dev/testing to clear data
 	case "SAVE":
-		// TODO: implement SAVE
+		// Trigger a snapshot when Raft is enabled; otherwise no-op.
+		if RaftEnabled() {
+			f := raftNode.raft.Snapshot()
+			if err := f.Error(); err != nil {
+				return resp.BuildErrorMsg(resp.ErrGeneric, err.Error())
+			}
+		}
+		return resp.Ok
 	case "FLUSHDB":
 		// TODO: implement FLUSHDB
 	}
