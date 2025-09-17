@@ -70,9 +70,11 @@ func TestExecuteCmd(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			core.ResetMemDB()
 			for _, args := range tt.init {
-				core.ExecuteCmd(args)
+				initCmd, _ := core.BuildCmd(args)
+				core.ExecuteCmd(initCmd)
 			}
-			if got := core.ExecuteCmd(tt.args.cmdArgs); got != tt.want {
+			cmd, _ := core.BuildCmd(tt.args.cmdArgs)
+			if got := core.ExecuteCmd(cmd); got != tt.want {
 				t.Errorf("ExecuteCmd() = %v, want %v", got, tt.want)
 			}
 		})

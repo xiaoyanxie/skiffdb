@@ -1,10 +1,12 @@
 package core
 
 import (
-    "kvdb/src/resp"
-    "log"
-    "strconv"
-    "time"
+	"fmt"
+	"kvdb/src/resp"
+	"log"
+	"strconv"
+	"strings"
+	"time"
 )
 
 var memdb = MemDB{}
@@ -17,134 +19,120 @@ func ResetMemDB() {
 	memdb.Init()
 }
 
-func ExecuteCmd(cmdArgs []string) string {
-	log.Printf("Executing command: %s\n", cmdArgs)
-	if len(cmdArgs) < 1 {
+// Cmd Operation represents a replicated command in the Raft log.
+type Cmd struct {
+	Op   string   `json:"op"`
+	Args []string `json:"args,omitempty"`
+}
+
+func (cmd *Cmd) ToString() string {
+	return fmt.Sprintf("RESP Command: Op=%s, Args=%v", cmd.Op, cmd.Args)
+}
+
+func (cmd *Cmd) isWriteOp() bool {
+	switch cmd.Op {
+	case "SET", "DEL", "INCR", "DECR", "INCRBY":
+		return true
+	default:
+		return false
+	}
+}
+
+func BuildCmd(args []string) (*Cmd, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("invalid command args %v", args)
+	}
+	if len(args) == 1 {
+		return &Cmd{
+			Op:   args[0],
+			Args: []string{},
+		}, nil
+	} else {
+		return &Cmd{
+			Op:   args[0],
+			Args: args[1:],
+		}, nil
+	}
+}
+
+func ExecuteCmd(cmd *Cmd) string {
+	log.Printf("Executing command: %s\n", cmd.ToString())
+	if cmd == nil {
 		return resp.ErrNoCommandSpecified
 	}
-	switch cmdArgs[0] {
-	/****************   Core commands   ****************/
-	//	Command		Description
-	//	PING		Used for connectivity check (redis-cli ping)
-	//	SET			Set a key with a value
-	//	GET			Get a value by key
-	//	DEL			Delete a single key
-	//	EXISTS		Check presence of keys
+
+	if cmd.isWriteOp() && RaftEnabled() {
+		if !IsLeader() {
+			return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
+		}
+		return ApplyCmdToReplicas(cmd, 5*time.Second)
+	} else {
+		return ExecuteLocally(cmd)
+	}
+}
+
+// ExecuteLocally applies the operation directly to the local DB (no Raft).
+func ExecuteLocally(cmd *Cmd) string {
+	switch strings.ToUpper(cmd.Op) {
 	case "PING":
-		if len(cmdArgs) == 1 {
+		if len(cmd.Args) == 0 {
 			return resp.Pong
 		}
-		return resp.BuildBulkString(&cmdArgs[1])
+		return resp.BuildBulkString(&cmd.Args[0])
 	case "SET":
-		if len(cmdArgs) != 3 {
+		if len(cmd.Args) != 2 {
 			return resp.ErrCommandFormatError
 		}
-		if RaftEnabled() {
-			if !IsLeader() {
-				return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
-			}
-			_, err := ApplyOperation(Operation{Op: "SET", Key: cmdArgs[1], Value: cmdArgs[2]}, 5*time.Second)
-			if err != nil {
-				return resp.BuildErrorMsg(resp.ErrGeneric, err.Error())
-			}
-			return resp.Ok
-		}
-		memdb.Set(cmdArgs[1], cmdArgs[2])
+		memdb.Set(cmd.Args[0], cmd.Args[1])
 		return resp.Ok
 	case "GET":
-		if len(cmdArgs) != 2 {
+		if len(cmd.Args) != 1 {
 			return resp.ErrCommandFormatError
 		}
-		return resp.BuildBulkString(memdb.Get(cmdArgs[1]))
+		return resp.BuildBulkString(memdb.Get(cmd.Args[0]))
 	case "DEL":
-		if len(cmdArgs) != 2 {
+		if len(cmd.Args) != 1 {
 			return resp.ErrCommandFormatError
 		}
-		if RaftEnabled() {
-			if !IsLeader() {
-				return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
-			}
-			_, err := ApplyOperation(Operation{Op: "DEL", Key: cmdArgs[1]}, 5*time.Second)
-			if err != nil {
-				return resp.BuildErrorMsg(resp.ErrGeneric, err.Error())
-			}
-			return resp.Ok
-		}
-		memdb.Delete(cmdArgs[1])
+		memdb.Delete(cmd.Args[0])
 		return resp.Ok
-	case "EXISTS":
-		if len(cmdArgs) < 2 {
-			return resp.ErrCommandFormatError
-		}
-		cnt := memdb.CountKeys(cmdArgs[1:])
-		return resp.BuildInteger(cnt)
-
-	/**************** Numeric commands  ****************/
-	//	Command		Description
-	//	INCR		Used for counters, IDs
-	//	DECR		Similar use case
-	//	INCRBY		More general than INCR
 	case "INCR":
-		if len(cmdArgs) != 2 {
+		if len(cmd.Args) != 1 {
 			return resp.ErrCommandFormatError
 		}
-		if RaftEnabled() {
-			if !IsLeader() {
-				return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
-			}
-			_, err := ApplyOperation(Operation{Op: "INCR", Key: cmdArgs[1], Delta: 1}, 5*time.Second)
-			if err != nil {
-				return resp.ErrWrongDataType
-			}
-			return resp.Ok
-		}
-		err := memdb.Incr(cmdArgs[1], 1)
+		err := memdb.Incr(cmd.Args[0], 1)
 		if err != nil {
 			return resp.ErrWrongDataType
 		}
 		return resp.Ok
 	case "DECR":
-		if len(cmdArgs) != 2 {
+		if len(cmd.Args) != 1 {
 			return resp.ErrCommandFormatError
 		}
-		if RaftEnabled() {
-			if !IsLeader() {
-				return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
-			}
-			_, err := ApplyOperation(Operation{Op: "INCR", Key: cmdArgs[1], Delta: -1}, 5*time.Second)
-			if err != nil {
-				return resp.ErrWrongDataType
-			}
-			return resp.Ok
-		}
-		err := memdb.Incr(cmdArgs[1], -1)
+		err := memdb.Incr(cmd.Args[0], -1)
 		if err != nil {
 			return resp.ErrWrongDataType
 		}
 		return resp.Ok
 	case "INCRBY":
-		if len(cmdArgs) != 3 {
+		if len(cmd.Args) != 2 {
 			return resp.ErrCommandFormatError
 		}
-		delta, err := strconv.Atoi(cmdArgs[2])
+		delta, err := strconv.Atoi(cmd.Args[1])
 		if err != nil {
 			return resp.ErrCommandFormatError
 		}
-		if RaftEnabled() {
-			if !IsLeader() {
-				return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
-			}
-			_, err := ApplyOperation(Operation{Op: "INCR", Key: cmdArgs[1], Delta: delta}, 5*time.Second)
-			if err != nil {
-				return resp.ErrWrongDataType
-			}
-			return resp.Ok
-		}
-		err = memdb.Incr(cmdArgs[1], delta)
+		err = memdb.Incr(cmd.Args[0], delta)
 		if err != nil {
 			return resp.ErrWrongDataType
 		}
 		return resp.Ok
+	case "EXISTS":
+		if len(cmd.Args) < 1 {
+			return resp.ErrCommandFormatError
+		}
+		cnt := memdb.CountKeys(cmd.Args)
+		return resp.BuildInteger(cnt)
 
 	/*********** Time-to-Live (TTL) Commands ***********/
 	//	Command		Description
@@ -191,12 +179,6 @@ func ExecuteCmd(cmdArgs []string) string {
 	//	FLUSHDB					Used in dev/testing to clear data
 	case "SAVE":
 		// Trigger a snapshot when Raft is enabled; otherwise no-op.
-		if RaftEnabled() {
-			f := raftNode.raft.Snapshot()
-			if err := f.Error(); err != nil {
-				return resp.BuildErrorMsg(resp.ErrGeneric, err.Error())
-			}
-		}
 		return resp.Ok
 	case "FLUSHDB":
 		// TODO: implement FLUSHDB

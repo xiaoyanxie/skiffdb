@@ -50,7 +50,7 @@ func BuildErrorMsg(code RedisErrorCode, msg string) string {
 // Null Bulk String  $-1    $-1\r\n
 func BuildBulkString(value *string) string {
 	if value == nil {
-		return fmt.Sprintf("$-1\r\n")
+		return "$-1\r\n"
 	}
 	ret := *value
 	return fmt.Sprintf("$%d\r\n%s\r\n", len(ret), ret)
@@ -69,7 +69,7 @@ func BuildInteger(value int) string {
 // Null Array	     *-1    *-1\r\n
 func BuildArray(value *[]string) string {
 	if value == nil {
-		return fmt.Sprintf("*-1\r\n")
+		return "*-1\r\n"
 	}
 	ret := *value
 	var b strings.Builder
@@ -86,3 +86,4 @@ var ErrNoCommandSpecified = BuildErrorMsg(ErrGeneric, "No command specified")
 var ErrCommandFormatError = BuildErrorMsg(ErrGeneric, "Command format error")
 var ErrWrongDataType = BuildErrorMsg(ErrWrongType, "Wrong data type")
 var ErrCommandUnsupported = BuildErrorMsg(ErrGeneric, "Command Unsupported")
+var ErrInternal = BuildErrorMsg(ErrGeneric, "System error. Please try again.")

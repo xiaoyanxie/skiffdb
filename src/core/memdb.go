@@ -64,11 +64,7 @@ func (db *MemDB) Incr(key string, delta int) error {
 
 	val, ok := db.keyspace[key]
 	if !ok {
-		if delta > 0 {
-			db.keyspace[key] = "1"
-		} else {
-			db.keyspace[key] = "0"
-		}
+		db.keyspace[key] = strconv.Itoa(delta)
 		return nil
 	}
 	i, err := strconv.Atoi(val)
