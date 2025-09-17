@@ -78,8 +78,8 @@ func StartRaft(nodeID string, raftAddr string, peers map[string]string) error {
 	return nil
 }
 
-// ApplyCmdToReplicas replicates an operation through Raft and waits for it to apply.
-func ApplyCmdToReplicas(cmd *Cmd, timeout time.Duration) string {
+// ApplyCmdViaRaft replicates an operation through Raft and waits for it to apply.
+func ApplyCmdViaRaft(cmd *Cmd, timeout time.Duration) string {
 	if !RaftEnabled() {
 		// Fallback: apply locally when raft disabled
 		return ExecuteLocally(cmd)
@@ -100,8 +100,8 @@ func ApplyCmdToReplicas(cmd *Cmd, timeout time.Duration) string {
 		log.Printf("raft apply: fsm returned error: %v", errResp)
 		return resp.ErrInternal
 	}
-	if _, ok := respVal.(string); ok {
-		return resp.Ok
+	if msg, ok := respVal.(string); ok {
+		return msg
 	}
 	log.Printf("raft apply: unexpected response type %T", respVal)
 	return resp.ErrInternal

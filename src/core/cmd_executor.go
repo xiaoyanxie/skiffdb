@@ -65,7 +65,7 @@ func ExecuteCmd(cmd *Cmd) string {
 		if !IsLeader() {
 			return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
 		}
-		return ApplyCmdToReplicas(cmd, 5*time.Second)
+		return ApplyCmdViaRaft(cmd, 5*time.Second)
 	} else {
 		return ExecuteLocally(cmd)
 	}
