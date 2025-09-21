@@ -1,8 +1,7 @@
 <p align="center">
   <img width="661" height="279" alt="image"
-       src="https://github.com/user-attachments/assets/27133b61-56af-452a-86ec-f6100157d11d" />
+       src="docs/skiffdb_logo.png" />
 </p>
-
 
 ------
 Skiffdb is a lightweight, Redis-protocol (RESP) key-value store designed as a **secondary-tier cache** with **optional persistence** and **high availability (HA)**. Point existing Redis clients at it for fast reads, consistent writes, and warm restarts when you want durability.
