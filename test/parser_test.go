@@ -2,8 +2,8 @@ package test
 
 import (
 	"bufio"
-	"kvdb/src/resp"
 	"log"
+	"skiffdb/src/resp"
 	"strings"
 	"testing"
 )

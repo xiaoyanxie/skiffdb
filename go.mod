@@ -1,4 +1,4 @@
-module kvdb
+module skiffdb
 
 go 1.23.0
 

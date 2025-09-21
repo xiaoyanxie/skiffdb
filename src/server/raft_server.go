@@ -3,10 +3,10 @@ package server
 import (
 	"context"
 	"errors"
-	"kvdb/proto/cluster"
-	"kvdb/src/core"
 	"log"
 	"net"
+	"skiffdb/proto/cluster"
+	"skiffdb/src/core"
 	"strings"
 	"sync"
 
@@ -34,9 +34,14 @@ func InitRaft(ctx context.Context, wg *sync.WaitGroup) {
 
 	log.Printf("admin server listening at %v", lis.Addr())
 	go func() {
+		defer wg.Done()
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
 		}
+	}()
+	go func() {
+		<-ctx.Done()
+		s.GracefulStop()
 	}()
 }
 

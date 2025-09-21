@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"kvdb/src/core"
-	"kvdb/src/server"
 	"log"
 	"os/signal"
+	"skiffdb/src/core"
+	"skiffdb/src/server"
 	"sync"
 	"syscall"
 )

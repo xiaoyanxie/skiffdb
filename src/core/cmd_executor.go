@@ -2,7 +2,7 @@ package core
 
 import (
 	"fmt"
-	"kvdb/src/resp"
+	"skiffdb/src/resp"
 	"strconv"
 	"strings"
 )

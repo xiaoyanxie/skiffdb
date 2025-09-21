@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package cluster;
 
-option go_package = "kvdb/proto/cluster";
+option go_package = "github.com/fanyi-zhao/skiffdb/proto/cluster";
 
 message JoinClusterRequest {
   string node_id = 1;

@@ -1,8 +1,8 @@
 package test
 
 import (
-	"kvdb/src/core"
-	"kvdb/src/resp"
+	"skiffdb/src/core"
+	"skiffdb/src/resp"
 	"testing"
 )
 

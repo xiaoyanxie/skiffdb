@@ -7,15 +7,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"skiffdb/proto/cluster"
+	"skiffdb/src/resp"
 
-	// "kvdb/src/core" // Removed to fix import cycle
-
-	"kvdb/src/resp"
+	// "github.com/fanyi-zhao/skiffdb/src/core" // Removed to fix import cycle
 
 	"strings"
 	"time"
-
-	"kvdb/proto/cluster"
 
 	"github.com/avast/retry-go"
 	"google.golang.org/grpc"

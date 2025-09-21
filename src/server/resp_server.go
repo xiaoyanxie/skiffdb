@@ -3,11 +3,12 @@ package server
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
-	"kvdb/src/core"
-	"kvdb/src/resp"
 	"log"
 	"net"
+	"skiffdb/src/core"
+	"skiffdb/src/resp"
 	"strings"
 	"sync"
 	"time"
@@ -29,13 +30,17 @@ func InitRESPTCPServer(ctx context.Context, wg *sync.WaitGroup) {
 
 	log.Printf("database server listening at %s", ln.Addr())
 	go func() {
+		defer wg.Done()
 		for {
 			conn, err := ln.Accept()
-			log.Println("Accepted connection from:", conn.RemoteAddr())
 			if err != nil {
+				if errors.Is(err, net.ErrClosed) || ctx.Err() != nil {
+					return
+				}
 				log.Println("Failed to accept connection:", err)
 				continue
 			}
+			log.Println("Accepted connection from:", conn.RemoteAddr())
 			go handleConnection(conn)
 		}
 	}()

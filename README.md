@@ -56,6 +56,7 @@ Terminal A:
   --maxmemory=1GB \
   --admin-addr=:7002 \
   --enable-raft \
+  --raft-id=node-8001 \
   --raft-addr=127.0.0.1:8001
 ```
 
@@ -67,6 +68,7 @@ Terminal B:
   --maxmemory=1GB \
   --admin-addr=:7003 \
   --enable-raft \
+  --raft-id=node-8002 \
   --raft-addr=127.0.0.1:8002 \
   --join=127.0.0.1:7002
 ```
@@ -74,11 +76,12 @@ Terminal B:
 Terminal C:
 ```bash
 ./skiffdb-server \
-  --addr=:6383 \
+  --addr=:6382 \
   --data-dir=./data \
   --maxmemory=1GB \
   --admin-addr=:7004 \
-  --raft true \
+  --enable-raft \
+  --raft-id=node-8003 \
   --raft-addr=127.0.0.1:8003 \
   --join=127.0.0.1:7002
 ```
