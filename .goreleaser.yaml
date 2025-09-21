@@ -1,12 +1,16 @@
 project_name: skiffdb
+
 builds:
   - id: skiffdb-server
-    main: ./cmd/skiffdb-server
-    env: [CGO_ENABLED=0]
+    main: .
+    binary: skiffdb-server
+    env:
+      - CGO_ENABLED=0
     ldflags:
       - -s -w -X main.version={{.Tag}}
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
+
 archives:
   - id: archive
     builds: [skiffdb-server]
@@ -14,7 +18,9 @@ archives:
       - goos: windows
         format: zip
     name_template: "skiffdb-server_{{ .Os }}_{{ .Arch }}"
+
 checksum:
   name_template: "checksums.txt"
+
 release:
   prerelease: auto
