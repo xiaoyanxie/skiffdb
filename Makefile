@@ -1,22 +1,23 @@
 # Project name
-APP_NAME := kvdb
+APP_NAME := skiffdb-server
 CMD_PATH := ./
-BUILD_DIR := bin
+BUILD_DIR := ./
 
-# Go settings
-GO       := go
-GOFILES  := $(shell find . -type f -name '*.go')
+.PHONY: all build clean run test proto
 
-.PHONY: all build clean run test
-
-all: build
+all: build test
 
 tidy:
 	@echo "📦 Tidying Go modules..."
 	go mod tidy
-build: tidy
+
+proto:
+	@echo "🔨 Building protobuf files"
+	protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative proto/cluster/cluster.proto
+
+build: proto tidy
 	@echo "🔨 Building $(APP_NAME)..."
-	$(GO) build -o $(BUILD_DIR)/$(APP_NAME) $(CMD_PATH)
+	go build -o $(BUILD_DIR)/$(APP_NAME) $(CMD_PATH)
 
 run: build
 	@echo "🚀 Running $(APP_NAME)..."
@@ -27,5 +28,6 @@ test:
 
 clean:
 	@echo "🧹 Cleaning up..."
-	rm -rf $(BUILD_DIR)
-
+# 	rm -rf $(BUILD_DIR)
+	rm ${APP_NAME}
+	rm proto/**/*.pb.go

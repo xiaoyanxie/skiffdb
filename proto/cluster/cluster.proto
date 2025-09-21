@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package cluster;
+
+option go_package = "kvdb/proto/cluster";
+
+message JoinClusterRequest {
+  string node_id = 1;
+  string addr = 2;
+}
+
+message JoinClusterResponse {
+  JoinClusterResponseCode code = 1;
+  ClusterInfo cluster = 2;
+}
+
+message ClusterInfo {
+  string leader_id = 1;
+  string leader_addr = 2;
+  string leader_admin_addr = 3;
+  repeated ClusterMember members = 4;
+}
+
+message ClusterMember {
+  string node_id = 1;
+  string addr = 2;
+  ClusterRole role = 3;
+}
+
+enum JoinClusterResponseCode {
+  SUCCESS = 0;
+  NOT_LEADER = 1;
+  RAFT_NOT_ENABLED = 2;
+}
+
+enum ClusterRole {
+  CLUSTER_ROLE_UNSPECIFIED = 0;
+  CLUSTER_ROLE_VOTER = 1;
+  CLUSTER_ROLE_NON_VOTER = 2;
+}
+
+service ClusterAdmin {
+  rpc JoinCluster (JoinClusterRequest) returns (JoinClusterResponse);
+}

@@ -3,10 +3,8 @@ package core
 import (
 	"fmt"
 	"kvdb/src/resp"
-	"log"
 	"strconv"
 	"strings"
-	"time"
 )
 
 var memdb = MemDB{}
@@ -29,7 +27,7 @@ func (cmd *Cmd) ToString() string {
 	return fmt.Sprintf("RESP Command: Op=%s, Args=%v", cmd.Op, cmd.Args)
 }
 
-func (cmd *Cmd) isWriteOp() bool {
+func (cmd *Cmd) IsWriteOp() bool {
 	switch cmd.Op {
 	case "SET", "DEL", "INCR", "DECR", "INCRBY":
 		return true
@@ -52,22 +50,6 @@ func BuildCmd(args []string) (*Cmd, error) {
 			Op:   args[0],
 			Args: args[1:],
 		}, nil
-	}
-}
-
-func ExecuteCmd(cmd *Cmd) string {
-	log.Printf("Executing command: %s\n", cmd.ToString())
-	if cmd == nil {
-		return resp.ErrNoCommandSpecified
-	}
-
-	if cmd.isWriteOp() && RaftEnabled() {
-		if !IsLeader() {
-			return resp.BuildErrorMsg(resp.ErrReadOnly, "writes allowed only on leader")
-		}
-		return ApplyCmdViaRaft(cmd, 5*time.Second)
-	} else {
-		return ExecuteLocally(cmd)
 	}
 }
 

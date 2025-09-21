@@ -2,8 +2,8 @@ package test
 
 import (
 	"bufio"
-	"fmt"
 	"kvdb/src/resp"
+	"log"
 	"strings"
 	"testing"
 )
@@ -102,7 +102,7 @@ func TestParseRESPCommand(t *testing.T) {
 			if tt.wantErr {
 				return
 			}
-			fmt.Printf("Parse result: %s\n", result)
+			log.Printf("Parse result: %s\n", result)
 			for i, arg := range tt.expected {
 				if arg != result[i] {
 					t.Errorf("ParseRESPCommand() error = %v, expected %v", result, tt.expected)

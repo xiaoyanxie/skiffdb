@@ -51,31 +51,36 @@ curl -s localhost:9090/metrics | head
 Terminal A:
 ```bash
 ./skiffdb-server \
-  --addr=:6381 \
-  --raft-id=node-a \
-  --raft-addr=:7001 \
-  --data-dir=./data-a \
-  --bootstrap
+  --addr=:6380 \
+  --data-dir=./data \
+  --maxmemory=1GB \
+  --admin-addr=:7002 \
+  --enable-raft \
+  --raft-addr=127.0.0.1:8001
 ```
 
 Terminal B:
 ```bash
 ./skiffdb-server \
-  --addr=:6382 \
-  --raft-id=node-b \
-  --raft-addr=:7002 \
-  --data-dir=./data-b \
-  --join=127.0.0.1:7001
+  --addr=:6381 \
+  --data-dir=./data \
+  --maxmemory=1GB \
+  --admin-addr=:7003 \
+  --enable-raft \
+  --raft-addr=127.0.0.1:8002 \
+  --join=127.0.0.1:7002
 ```
 
 Terminal C:
 ```bash
 ./skiffdb-server \
   --addr=:6383 \
-  --raft-id=node-c \
-  --raft-addr=:7003 \
-  --data-dir=./data-c \
-  --join=127.0.0.1:7001
+  --data-dir=./data \
+  --maxmemory=1GB \
+  --admin-addr=:7004 \
+  --raft true \
+  --raft-addr=127.0.0.1:8003 \
+  --join=127.0.0.1:7002
 ```
 
 Point clients at the leader (Skiffdb will log which node is leader) for linearizable writes. Stale reads from followers may be allowed for cache workloads (depending on config).
@@ -118,7 +123,12 @@ Run:
 git clone https://github.com/fanyi-zhao/skiffdb.git
 cd skiffdb
 
+# Install dependencies
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
 # Build server
+go mod tidy
 go build -o skiffdb-server
 
 # Run tests

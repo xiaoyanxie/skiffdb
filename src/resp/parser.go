@@ -69,19 +69,17 @@ func ParseRESPCommand(reader *bufio.Reader, ctx *ParserContext) error {
 	case CommandStart:
 		cmd, err := readNextCmd(reader)
 		if err != nil {
-			log.Println("Failed to read command:", err)
 			return err
 		}
 		err = readCommandStart(cmd, ctx)
 		if err != nil {
-			log.Println("Failed to read command:", err)
+			log.Println("Failed to readCommandStart:", err)
 			return err
 		}
 		return ParseRESPCommand(reader, ctx)
 	case BulkStringLen:
 		cmd, err := readNextCmd(reader)
 		if err != nil {
-			log.Println("Failed to read command:", err)
 			return err
 		}
 		err = readCommandStart(cmd, ctx)
@@ -93,7 +91,7 @@ func ParseRESPCommand(reader *bufio.Reader, ctx *ParserContext) error {
 	case BulkStringBody:
 		cmd, err := readNextCmdFixedLength(reader, ctx.bulkStrLen)
 		if err != nil {
-			log.Println("Failed to read command:", err)
+			log.Println("Failed to readNextCmdFixedLength:", err)
 			return err
 		}
 		str := string(cmd)

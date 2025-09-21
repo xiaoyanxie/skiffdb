@@ -3,3 +3,5 @@ bin
 .vscode
 .iml
 .gocache
+proto/***/*.pb.go
+skiffdb-server
