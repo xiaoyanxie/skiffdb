@@ -3,7 +3,7 @@ APP_NAME := skiffdb-server
 CMD_PATH := ./
 BUILD_DIR := ./
 
-.PHONY: all build clean run test proto
+.PHONY: all build clean run test proto benchmark-smoke benchmark-full benchmark-test
 
 all: build test
 
@@ -27,7 +27,16 @@ run: build
 	./$(BUILD_DIR)/$(APP_NAME)
 
 test:
-	go test -v ./test/...
+	go test -v ./...
+
+benchmark-test:
+	go test ./benchmarks/...
+
+benchmark-smoke: proto
+	go run ./benchmarks/cmd/skiffdb-bench run --profile smoke
+
+benchmark-full: proto
+	go run ./benchmarks/cmd/skiffdb-bench run --profile full
 
 clean:
 	@echo "🧹 Cleaning up..."

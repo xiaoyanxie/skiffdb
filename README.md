@@ -46,6 +46,10 @@ Optional health/metrics (if enabled in your build):
 curl -s localhost:9090/healthz
 curl -s localhost:9090/metrics | head
 
+Per-request logging is enabled by default. Performance runs should pass
+`--log-requests=false`; the repository benchmark harness does this automatically
+and records the setting in every result.
+
 ### 2) 3-node HA cluster (alpha)
 > Basic leader/follower replication; single Raft group. Start three processes with unique IDs and addresses. Bootstrap once.
 Terminal A:
@@ -210,6 +214,60 @@ go build -o skiffdb-server
 # Run tests
 go test ./...
 ```
+
+## Performance and recovery benchmarks
+
+The repository-owned harness builds SkiffDB, allocates validated loopback ports
+and unique temporary data directories, starts every node it needs, runs a
+deterministic RESP workload, injects failures, writes partial results after each
+step, and stops only the child processes it created. Logs are retained under the
+result directory even when a run fails or is interrupted.
+
+Run the short local smoke profile (one mixed workload in every deployment mode,
+plus snapshot and recovery scenarios):
+
+```bash
+make benchmark-smoke
+```
+
+Run the complete 36-cell baseline matrix (four GET/SET mixes, three value sizes,
+and three deployment modes) plus recovery scenarios:
+
+```bash
+make benchmark-full
+```
+
+The equivalent command exposes duration, warm-up, concurrency, pipeline depth,
+seed, build command, and result-root controls:
+
+```bash
+go run ./benchmarks/cmd/skiffdb-bench run \
+  --profile smoke --duration 2s --warmup 500ms \
+  --concurrency 4 --pipeline 1 --seed 1
+```
+
+Each run creates `benchmarks/results/<timestamp>-<git-sha>/metadata.json`,
+`metrics.json`, `summary.md`, and `logs/`. The JSON records Git/host/storage
+metadata, workload settings, counts, throughput, per-operation p50/p95/p99/p999,
+CPU and peak RSS, platform disk counters when available, snapshot interference,
+election time, follower catch-up, and full-cluster recovery. Metrics that the
+server cannot currently expose (including Raft commit/apply latency and follower
+lag) are listed explicitly rather than omitted.
+
+Compare two historical result directories and emit Markdown plus JSON:
+
+```bash
+go run ./benchmarks/cmd/skiffdb-bench compare \
+  --output benchmarks/comparison \
+  benchmarks/results/BASELINE benchmarks/results/CANDIDATE
+```
+
+Only compare runs from the same host with identical workload parameters. In
+particular, never present the in-memory baseline and durable Raft modes as
+equivalent: their acknowledgement and durability guarantees differ. A checked-in
+smoke artifact is available in `benchmarks/results/example/` to document the
+schema and the single-node, three-voter, snapshot-under-load, and restart/recovery
+measurements.
 
 ## Roadmap
 A pragmatic path to a cache-first KV with opt-in persistence and trustworthy HA.

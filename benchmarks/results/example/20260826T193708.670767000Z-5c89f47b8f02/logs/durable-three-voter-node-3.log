@@ -1,0 +1,319 @@
+2026-08-26T12:37:14.818-0700 [INFO]  raft: initial configuration: index=0 servers=[]
+2026/08/26 12:37:14 Prepare to join cluster. Connecting to: 127.0.0.1:62292 ...
+2026/08/26 12:37:14 Sending JoinClusterRequest.
+2026-08-26T12:37:14.818-0700 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:62299 [Follower]" leader-address= leader-id=
+2026/08/26 12:37:14 Successfully joined the cluster. Leader: 127.0.0.1:62292
+2026-08-26T12:37:14.840-0700 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026/08/26 12:37:14 Raft enabled at 127.0.0.1:62299, id: bench-node-3
+2026/08/26 12:37:14 admin server listening at 127.0.0.1:62298
+2026/08/26 12:37:14 database server listening at 127.0.0.1:62297
+2026/08/26 12:37:14 Accepted connection from: 127.0.0.1:62355
+2026/08/26 12:37:14 Client closed connection
+2026/08/26 12:37:20 all servers stopped
+2026-08-26T12:37:22.942-0700 [INFO]  raft: initial configuration: index=0 servers=[]
+2026/08/26 12:37:22 Prepare to join cluster. Connecting to: 127.0.0.1:62367 ...
+2026/08/26 12:37:22 Sending JoinClusterRequest.
+2026-08-26T12:37:22.942-0700 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:62374 [Follower]" leader-address= leader-id=
+2026/08/26 12:37:22 Successfully joined the cluster. Leader: 127.0.0.1:62367
+2026-08-26T12:37:22.965-0700 [WARN]  raft: failed to get previous log: previous-index=6 last-index=0 error="log not found"
+2026/08/26 12:37:22 Raft enabled at 127.0.0.1:62374, id: bench-node-3
+2026/08/26 12:37:22 admin server listening at 127.0.0.1:62373
+2026/08/26 12:37:22 database server listening at 127.0.0.1:62372
+2026/08/26 12:37:23 Accepted connection from: 127.0.0.1:62460
+2026/08/26 12:37:23 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62486
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62488
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62490
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62492
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62494
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62496
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62498
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62500
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62502
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62504
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:29 Accepted connection from: 127.0.0.1:62506
+2026/08/26 12:37:29 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62508
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62510
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62512
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62514
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62516
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62518
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62520
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62522
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62524
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62526
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62528
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62530
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62532
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62534
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62536
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62538
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62540
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62542
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62544
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62546
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62548
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62550
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62552
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62554
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62556
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62558
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62560
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62562
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62564
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62566
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62568
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62570
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62572
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62574
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62576
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62578
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:30 Accepted connection from: 127.0.0.1:62580
+2026/08/26 12:37:30 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62582
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62584
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62588
+2026-08-26T12:37:31.068-0700 [WARN]  raft: rejecting vote request since we have a leader: from=127.0.0.1:62371 leader=127.0.0.1:62368 leader-id=bench-node-1
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62590
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62592
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62594
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62596
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62598
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62600
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62602
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62604
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62606
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62608
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62610
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62612
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62614
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62616
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62618
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62620
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62622
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62624
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62626
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62628
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62630
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62632
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62634
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62636
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62638
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62640
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62642
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62644
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62646
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62648
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62650
+2026/08/26 12:37:31 Client closed connection
+2026-08-26T12:37:31.921-0700 [WARN]  raft: heartbeat timeout reached, starting election: last-leader-addr=127.0.0.1:62368 last-leader-id=bench-node-1
+2026-08-26T12:37:31.921-0700 [INFO]  raft: entering candidate state: node="Node at 127.0.0.1:62374 [Candidate]" term=3
+2026-08-26T12:37:31.930-0700 [DEBUG] raft: asking for vote: term=3 from=bench-node-1 address=127.0.0.1:62368
+2026-08-26T12:37:31.930-0700 [DEBUG] raft: asking for vote: term=3 from=bench-node-2 address=127.0.0.1:62371
+2026-08-26T12:37:31.930-0700 [DEBUG] raft: voting for self: term=3 id=bench-node-3
+2026-08-26T12:37:31.930-0700 [ERROR] raft: failed to make requestVote RPC: target="{Voter bench-node-1 127.0.0.1:62368}" error="dial tcp 127.0.0.1:62368: connect: connection refused" term=3
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62654
+2026-08-26T12:37:31.946-0700 [DEBUG] raft: calculated votes needed: needed=2 term=3
+2026-08-26T12:37:31.946-0700 [DEBUG] raft: vote granted: from=bench-node-3 term=3 tally=1
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:31 Accepted connection from: 127.0.0.1:62656
+2026/08/26 12:37:31 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62658
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62660
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62662
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62664
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62666
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62668
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62670
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62672
+2026/08/26 12:37:32 Client closed connection
+2026-08-26T12:37:32.212-0700 [DEBUG] raft: lost leadership because received a requestVote with a newer term
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62675
+2026/08/26 12:37:32 Client closed connection
+2026-08-26T12:37:32.233-0700 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:62374 [Follower]" leader-address= leader-id=
+2026/08/26 12:37:32 all servers stopped
+2026-08-26T12:37:32.523-0700 [INFO]  raft: initial configuration: index=6 servers="[{Suffrage:Voter ID:bench-node-1 Address:127.0.0.1:62368} {Suffrage:Voter ID:bench-node-2 Address:127.0.0.1:62371} {Suffrage:Voter ID:bench-node-3 Address:127.0.0.1:62374}]"
+2026/08/26 12:37:32 Reopened existing Raft state for node bench-node-3
+2026/08/26 12:37:32 Raft enabled at 127.0.0.1:62374, id: bench-node-3
+2026/08/26 12:37:32 admin server listening at 127.0.0.1:62373
+2026/08/26 12:37:32 database server listening at 127.0.0.1:62372
+2026-08-26T12:37:32.523-0700 [INFO]  raft: entering follower state: follower="Node at 127.0.0.1:62374 [Follower]" leader-address= leader-id=
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62698
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62701
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62704
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62707
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62710
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62713
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62716
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62719
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62722
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62725
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62728
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62731
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62734
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62737
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62740
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62743
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62746
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:32 Accepted connection from: 127.0.0.1:62749
+2026/08/26 12:37:32 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62752
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62755
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62758
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62761
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62764
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62767
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62770
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62773
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62776
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62779
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62782
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62785
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62788
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62791
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62794
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62797
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62800
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62803
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62806
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62809
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62812
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62815
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62818
+2026/08/26 12:37:33 Client closed connection
+2026-08-26T12:37:33.629-0700 [DEBUG] raft: lost leadership because received a requestVote with a newer term
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62823
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62827
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62833
+2026/08/26 12:37:33 Accepted connection from: 127.0.0.1:62834
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 Client closed connection
+2026/08/26 12:37:33 all servers stopped

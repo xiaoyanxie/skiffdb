@@ -531,9 +531,11 @@ func JoinCluster(nodeID string, addr string) (*ClusterInfo, error) {
 	if alreadyMember {
 		return buildClusterInfoForNode(raftNode)
 	}
-	future := raftNode.raft.AddNonvoter(raftpkg.ServerID(nodeID), raftpkg.ServerAddress(addr), 0, 30*time.Second)
+	// A normal SkiffDB HA deployment is a voter set. HashiCorp Raft stages and
+	// catches up the new voter before it can participate in quorum decisions.
+	future := raftNode.raft.AddVoter(raftpkg.ServerID(nodeID), raftpkg.ServerAddress(addr), 0, 30*time.Second)
 	if err := future.Error(); err != nil {
-		return nil, fmt.Errorf("add nonvoter: %w", err)
+		return nil, fmt.Errorf("add voter: %w", err)
 	}
 	return buildClusterInfoForNode(raftNode)
 }

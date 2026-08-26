@@ -89,9 +89,11 @@ func handleConnection(conn net.Conn) {
 }
 
 func executeRESPCmd(cmd *core.Cmd) string {
-	log.Printf("Executing command: %s\n", cmd.ToString())
 	if cmd == nil {
 		return resp.ErrNoCommandSpecified
+	}
+	if core.DBConfig == nil || core.DBConfig.LogRequests {
+		log.Printf("Executing command: %s\n", cmd.ToString())
 	}
 
 	if cmd.IsWriteOp() && core.RaftEnabled() {

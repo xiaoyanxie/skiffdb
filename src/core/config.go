@@ -17,9 +17,10 @@ type Config struct {
 	// peers     *map[string]string
 	AdminAddr string
 
-	ListenAddr string
-	dataDir    string
-	maxmemory  string
+	ListenAddr  string
+	dataDir     string
+	maxmemory   string
+	LogRequests bool
 }
 
 var DBConfig *Config
@@ -41,6 +42,7 @@ func InitDBConfig() {
 	listenAddr := flag.String("addr", ":6379", "server listen address")
 	dataDir := flag.String("data-dir", "", "the directory used to store data")
 	maxmemory := flag.String("maxmemory", "", "the max memory allowed for this instance")
+	logRequests := flag.Bool("log-requests", true, "log every request (disable for benchmarks)")
 
 	flag.Parse()
 
@@ -54,9 +56,10 @@ func InitDBConfig() {
 
 		AdminAddr: strings.TrimSpace(*adminAddr),
 
-		ListenAddr: strings.TrimSpace(*listenAddr),
-		dataDir:    strings.TrimSpace(*dataDir),
-		maxmemory:  strings.TrimSpace(*maxmemory),
+		ListenAddr:  strings.TrimSpace(*listenAddr),
+		dataDir:     strings.TrimSpace(*dataDir),
+		maxmemory:   strings.TrimSpace(*maxmemory),
+		LogRequests: *logRequests,
 	}
 }
 
