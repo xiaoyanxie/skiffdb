@@ -6,5 +6,3 @@ bin
 proto/***/*.pb.go
 skiffdb-server
 benchmarks/results/*
-!benchmarks/results/example/
-!benchmarks/results/example/**

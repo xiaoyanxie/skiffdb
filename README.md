@@ -281,10 +281,10 @@ go run ./benchmarks/cmd/skiffdb-bench compare \
 
 Only compare runs from the same host with identical workload parameters. In
 particular, never present the in-memory baseline and durable Raft modes as
-equivalent: their acknowledgement and durability guarantees differ. A checked-in
-smoke artifact is available in `benchmarks/results/example/` to document the
-schema and the single-node, three-voter, snapshot-under-load, and restart/recovery
-measurements.
+equivalent: their acknowledgement and durability guarantees differ. Benchmark
+artifacts under `benchmarks/results/` are local-only and excluded from Git; use
+each run's `summary.md`, `metadata.json`, and `metrics.json` to inspect or archive
+the results outside the repository.
 
 ## Roadmap
 A pragmatic path to a cache-first KV with opt-in persistence and trustworthy HA.
