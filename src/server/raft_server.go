@@ -26,6 +26,9 @@ func InitRaft(ctx context.Context, wg *sync.WaitGroup) {
 
 	lis, err := net.Listen("tcp", core.DBConfig.AdminAddr)
 	if err != nil {
+		if shutdownErr := core.ShutdownRaft(); shutdownErr != nil {
+			log.Printf("failed to close raft after admin listener error: %v", shutdownErr)
+		}
 		log.Fatalf("failed to listen: %v", err)
 	}
 
@@ -35,8 +38,12 @@ func InitRaft(ctx context.Context, wg *sync.WaitGroup) {
 	log.Printf("admin server listening at %v", lis.Addr())
 	go func() {
 		defer wg.Done()
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+		serveErr := s.Serve(lis)
+		if err := core.ShutdownRaft(); err != nil {
+			log.Printf("failed to shut down raft cleanly: %v", err)
+		}
+		if serveErr != nil && ctx.Err() == nil {
+			log.Printf("admin server stopped unexpectedly: %v", serveErr)
 		}
 	}()
 	go func() {

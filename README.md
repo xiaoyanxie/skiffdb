@@ -17,7 +17,7 @@ Skiffdb is a lightweight, Redis-protocol (RESP) key-value store designed as a **
 ## Current highlights
 - RESP server with common commands (`GET`/`SET`/`DEL`/`EXPIRE`/`TTL`/`EXISTS`/`INCR`/`DECR`, simple Lists/Hashes, `PING`).
 - TTLs with lazy expiration (active sweeps on the roadmap).
-- Basic HA scaffolding (Raft-based) with in-memory snapshotting.
+- Basic HA scaffolding with durable Raft log and consensus state; FSM snapshot recovery is still WIP.
 - Simple in-memory engine (map + locks) — easy to hack, easy to profile.
 
 ## Getting Started
@@ -87,6 +87,34 @@ Terminal C:
 ```
 
 Point clients at the leader (Skiffdb will log which node is leader) for linearizable writes. Stale reads from followers may be allowed for cache workloads (depending on config).
+
+### Raft storage and restart behavior
+
+Raft-enabled nodes require a stable, explicit `--raft-id`. Consensus state is
+stored beneath the configured data directory:
+
+```text
+<data-dir>/raft/<raft-id>/raft.db
+```
+
+The node directory is created with mode `0700` and the bbolt database with mode
+`0600`. bbolt holds an exclusive file lock while the node is running; a second
+process using the same data directory and Raft ID fails startup after a bounded
+timeout. On restart, an initialized store is reopened without bootstrapping or
+joining the cluster again.
+
+Raft log and stable-state writes use `raft-boltdb/v2` with `NoSync=false`.
+Consequently, each completed bbolt write transaction synchronizes the database
+file before returning to Raft. SkiffDB does not acknowledge a successful Raft
+write until HashiCorp Raft reports that it is committed and applied. This policy
+assumes the operating system, filesystem, and storage device honor their normal
+fsync durability contract.
+
+Durable FSM snapshots are tracked separately. Until they are implemented,
+automatic Raft snapshotting and log compaction are disabled. A restart therefore
+preserves the Raft log, current term, vote, and cluster configuration, but does
+not yet restore the in-memory user keyspace. Graceful shutdown stops Raft first,
+then closes its TCP transport and bbolt store.
 
 ### 3) Run With Config file (TOML)
 You can also run with a config file:

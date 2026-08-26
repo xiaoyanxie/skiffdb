@@ -13,6 +13,7 @@ import (
 	// "github.com/fanyi-zhao/skiffdb/src/core" // Removed to fix import cycle
 
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/avast/retry-go"
@@ -22,13 +23,21 @@ import (
 	raftpkg "github.com/hashicorp/raft"
 )
 
-// RaftNode encapsulates the Hashicorp Raft instance for this process.
+// RaftNode encapsulates the HashiCorp Raft instance for this process.
 type RaftNode struct {
-	raft    *raftpkg.Raft
-	localID *raftpkg.ServerID
+	raft             *raftpkg.Raft
+	localID          *raftpkg.ServerID
+	transport        *raftpkg.NetworkTransport
+	stores           *raftStores
+	hadExistingState bool
+	closeOnce        sync.Once
+	closeErr         error
 }
 
-var raftNode *RaftNode
+var (
+	raftNode   *RaftNode
+	raftNodeMu sync.RWMutex
+)
 
 // ClusterRole represents the suffrage for a cluster member.
 type ClusterRole int
@@ -83,19 +92,31 @@ func (e *NotLeaderError) Error() string {
 }
 
 // RaftEnabled returns true if a raft node has been started.
-func RaftEnabled() bool { return raftNode != nil && raftNode.raft != nil }
+func RaftEnabled() bool {
+	raftNodeMu.RLock()
+	defer raftNodeMu.RUnlock()
+	return raftNode != nil && raftNode.raft != nil
+}
 
 // IsLeader returns true if this node is the current leader.
 func IsLeader() bool {
-	if !RaftEnabled() {
+	raftNodeMu.RLock()
+	defer raftNodeMu.RUnlock()
+	if raftNode == nil || raftNode.raft == nil {
 		return false
 	}
 	return raftNode.raft.State() == raftpkg.Leader
 }
 
-// StartRaft starts a minimal Raft node with in-memory stores.
+// StartRaft starts a Raft node backed by durable local storage.
 func StartRaft(ctx context.Context, config *Config) error {
-	if RaftEnabled() {
+	if config == nil {
+		return errors.New("raft config is required")
+	}
+
+	raftNodeMu.Lock()
+	defer raftNodeMu.Unlock()
+	if raftNode != nil {
 		return fmt.Errorf("duplicated call to StartRaft is not permitted")
 	}
 
@@ -104,52 +125,98 @@ func StartRaft(ctx context.Context, config *Config) error {
 		return nil
 	}
 
-	var err error
-	raftNode, err = initRaftNode()
+	stores, err := newPersistentRaftStores(config)
 	if err != nil {
-		log.Default().Fatalf("Failed to init Raft FSM.", err)
+		return fmt.Errorf("initialize durable raft storage: %w", err)
+	}
+
+	node, err := initRaftNode(config, stores)
+	if err != nil {
+		_ = stores.Close()
 		return err
 	}
 
-	if config.JoinAddr == "" {
-		createNewCluster(ctx)
+	if !node.hadExistingState {
+		if config.JoinAddr == "" {
+			err = createNewCluster(node, config)
+		} else {
+			err = joinCluster(ctx, config)
+		}
+		if err != nil {
+			closeErr := node.Close()
+			return errors.Join(err, closeErr)
+		}
 	} else {
-		err = joinCluster(ctx)
+		log.Printf("Reopened existing Raft state for node %s", config.GetRaftId())
 	}
 
-	if err != nil {
-		log.Default().Fatalf("Failed to init Raft FSM. Err:%v", err)
-		return err
-	}
-
+	raftNode = node
 	// observe cluster state changes
-	observeClusterLeaderChange(ctx)
+	observeClusterLeaderChange(ctx, node)
 	return nil
+}
+
+// ShutdownRaft stops Raft before closing its transport and durable stores.
+func ShutdownRaft() error {
+	raftNodeMu.Lock()
+	defer raftNodeMu.Unlock()
+	if raftNode == nil {
+		return nil
+	}
+	node := raftNode
+	raftNode = nil
+	return node.Close()
+}
+
+func (node *RaftNode) Close() error {
+	if node == nil {
+		return nil
+	}
+	node.closeOnce.Do(func() {
+		var closeErrors []error
+		if node.raft != nil {
+			if err := node.raft.Shutdown().Error(); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("shutdown raft: %w", err))
+			}
+		}
+		if node.transport != nil {
+			if err := node.transport.Close(); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close raft transport: %w", err))
+			}
+		}
+		if node.stores != nil {
+			if err := node.stores.Close(); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close raft stores: %w", err))
+			}
+		}
+		node.closeErr = errors.Join(closeErrors...)
+	})
+	return node.closeErr
 }
 
 var ErrInternal = errors.New("failed to join the cluster: internal error")
 
-func createNewCluster(ctx context.Context) {
-	confFuture := raftNode.raft.BootstrapCluster(raftpkg.Configuration{Servers: []raftpkg.Server{
+func createNewCluster(node *RaftNode, config *Config) error {
+	confFuture := node.raft.BootstrapCluster(raftpkg.Configuration{Servers: []raftpkg.Server{
 		{
 			Suffrage: raftpkg.Voter,
-			ID:       *raftNode.localID,
-			Address:  raftpkg.ServerAddress(DBConfig.RaftAddr),
+			ID:       *node.localID,
+			Address:  raftpkg.ServerAddress(config.RaftAddr),
 		},
 	}})
-	if err := confFuture.Error(); err != nil && !strings.Contains(err.Error(), "bootstrap") {
-		// If already bootstrapped, ignore; otherwise report.
-		log.Printf("raft bootstrap warning: %v", err)
+	if err := confFuture.Error(); err != nil {
+		return fmt.Errorf("bootstrap raft cluster: %w", err)
 	}
+	return nil
 }
 
-func joinCluster(ctx context.Context) error {
+func joinCluster(ctx context.Context, config *Config) error {
 	sendRequest := func() error {
 		// init connection
-		log.Printf("Prepare to join cluster. Connecting to: %v ...", DBConfig.JoinAddr)
-		conn, err := grpc.NewClient(DBConfig.JoinAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		log.Printf("Prepare to join cluster. Connecting to: %v ...", config.JoinAddr)
+		conn, err := grpc.NewClient(config.JoinAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
-			log.Printf("Failed to connect cluster: %s. %v", DBConfig.JoinAddr, err)
+			log.Printf("Failed to connect cluster: %s. %v", config.JoinAddr, err)
 			return ErrInternal
 		}
 		defer conn.Close()
@@ -158,13 +225,13 @@ func joinCluster(ctx context.Context) error {
 		client := cluster.NewClusterAdminClient(conn)
 		log.Println("Sending JoinClusterRequest.")
 		response, err := client.JoinCluster(ctx, &cluster.JoinClusterRequest{
-			NodeId: DBConfig.GetRaftId(),
-			Addr:   DBConfig.RaftAddr,
+			NodeId: config.GetRaftId(),
+			Addr:   config.RaftAddr,
 		})
 
 		// check error
 		if err != nil {
-			log.Printf("Failed to join the cluster: %s. %v", DBConfig.JoinAddr, err)
+			log.Printf("Failed to join the cluster: %s. %v", config.JoinAddr, err)
 			return ErrInternal
 		}
 
@@ -173,7 +240,7 @@ func joinCluster(ctx context.Context) error {
 		case cluster.JoinClusterResponseCode_SUCCESS:
 			return nil
 		case cluster.JoinClusterResponseCode_RAFT_NOT_ENABLED:
-			return retry.Unrecoverable(fmt.Errorf("fatal status: %v is not a raft node", DBConfig.JoinAddr))
+			return retry.Unrecoverable(fmt.Errorf("fatal status: %v is not a raft node", config.JoinAddr))
 		case cluster.JoinClusterResponseCode_NOT_LEADER:
 			if response.Cluster != nil {
 				return &NotLeaderError{
@@ -196,51 +263,65 @@ func joinCluster(ctx context.Context) error {
 		retry.OnRetry(func(n uint, err error) {
 			log.Printf("attempt %d, reason:%v\n", n+1, err)
 			if nle, ok := err.(*NotLeaderError); ok {
-				log.Printf("Cluster leader changed from %s to %s. Will update the JoinAddr and try again.", DBConfig.JoinAddr, nle.LeaderAdminAddr)
-				DBConfig.JoinAddr = nle.LeaderAdminAddr
+				log.Printf("Cluster leader changed from %s to %s. Will update the JoinAddr and try again.", config.JoinAddr, nle.LeaderAdminAddr)
+				config.JoinAddr = nle.LeaderAdminAddr
 			}
 		}),
 		retry.LastErrorOnly(true),
 	)
 	if err == nil {
-		log.Printf("Successfully joined the cluster. Leader: %v", DBConfig.JoinAddr)
+		log.Printf("Successfully joined the cluster. Leader: %v", config.JoinAddr)
 	}
 	return err
 }
 
-func initRaftNode() (*RaftNode, error) {
+func initRaftNode(config *Config, stores *raftStores) (*RaftNode, error) {
+	if stores == nil || stores.logStore == nil || stores.stableStore == nil || stores.snapshotStore == nil {
+		return nil, errors.New("raft stores are required")
+	}
 	conf := raftpkg.DefaultConfig()
-	conf.LocalID = raftpkg.ServerID(DBConfig.GetRaftId())
+	conf.LocalID = raftpkg.ServerID(config.GetRaftId())
+	// Durable snapshots are implemented in issue #4. Until then, prevent the
+	// snapshot loop from compacting logs that are the only restartable copy.
+	conf.SnapshotThreshold = ^uint64(0)
 
-	transport, err := raftpkg.NewTCPTransport(DBConfig.RaftAddr, nil, 3, 10*time.Second, nil)
+	hadExistingState, err := raftpkg.HasExistingState(stores.logStore, stores.stableStore, stores.snapshotStore)
+	if err != nil {
+		return nil, fmt.Errorf("inspect existing raft state: %w", err)
+	}
+
+	transport, err := raftpkg.NewTCPTransport(config.RaftAddr, nil, 3, 10*time.Second, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TCP transport: %w", err)
 	}
 
-	stableStore := raftpkg.NewInmemStore()
-	logStore := raftpkg.NewInmemStore()
-	snapshotStore := raftpkg.NewDiscardSnapshotStore()
-
 	fsm := &fsm{db: &memdb}
 
-	r, err := raftpkg.NewRaft(conf, fsm, logStore, stableStore, snapshotStore, transport)
+	r, err := raftpkg.NewRaft(conf, fsm, stores.logStore, stores.stableStore, stores.snapshotStore, transport)
 	if err != nil {
+		_ = transport.Close()
 		return nil, fmt.Errorf("failed to create raft: %w", err)
 	}
-	id := raftpkg.ServerID(DBConfig.GetRaftId())
-	return &RaftNode{raft: r, localID: &id}, nil
+	id := raftpkg.ServerID(config.GetRaftId())
+	return &RaftNode{
+		raft:             r,
+		localID:          &id,
+		transport:        transport,
+		stores:           stores,
+		hadExistingState: hadExistingState,
+	}, nil
 }
 
-func observeClusterLeaderChange(ctx context.Context) {
+func observeClusterLeaderChange(ctx context.Context, node *RaftNode) {
 	obsCh := make(chan raftpkg.Observation, 64)
 	observer := raftpkg.NewObserver(obsCh, false, func(o *raftpkg.Observation) bool {
 		_, ok := o.Data.(raftpkg.LeaderObservation)
 		return ok
 	})
-	raftNode.raft.RegisterObserver(observer)
+	node.raft.RegisterObserver(observer)
 	workCh := make(chan raftpkg.LeaderObservation, 64)
 	go func() {
-		defer raftNode.raft.DeregisterObserver(observer)
+		defer node.raft.DeregisterObserver(observer)
 		for {
 			select {
 			case <-ctx.Done():
@@ -253,7 +334,7 @@ func observeClusterLeaderChange(ctx context.Context) {
 				if !ok {
 					continue
 				}
-				if leaderEvent.LeaderID == *raftNode.localID {
+				if leaderEvent.LeaderID == *node.localID {
 					// Notify all followers of my gRPC address
 					workCh <- leaderEvent
 				}
@@ -279,7 +360,7 @@ func observeClusterLeaderChange(ctx context.Context) {
 				}
 				lastLeader = ev.LeaderID
 
-				ApplyCmdViaRaft(&Cmd{
+				applyCmdViaRaftNode(node, &Cmd{
 					Op:   OpLeaderChanged,
 					Args: []string{GetLeaderAdminAddr()},
 				}, 3*time.Second)
@@ -290,10 +371,12 @@ func observeClusterLeaderChange(ctx context.Context) {
 
 // JoinCluster registers a new node with the running raft cluster.
 func JoinCluster(nodeID string, addr string) (*ClusterInfo, error) {
-	if !RaftEnabled() {
+	raftNodeMu.RLock()
+	defer raftNodeMu.RUnlock()
+	if raftNode == nil || raftNode.raft == nil {
 		return nil, ErrRaftNotEnabled
 	}
-	if !IsLeader() {
+	if raftNode.raft.State() != raftpkg.Leader {
 		return nil, &NotLeaderError{
 			LeaderAdminAddr: leaderAdminAddr,
 		}
@@ -305,20 +388,26 @@ func JoinCluster(nodeID string, addr string) (*ClusterInfo, error) {
 	if err := future.Error(); err != nil {
 		return nil, fmt.Errorf("add nonvoter: %w", err)
 	}
-	return buildClusterInfo()
+	return buildClusterInfoForNode(raftNode)
 }
 
 // buildClusterInfo materialises the current configuration for RPC responses.
 func buildClusterInfo() (*ClusterInfo, error) {
-	if !RaftEnabled() {
+	raftNodeMu.RLock()
+	defer raftNodeMu.RUnlock()
+	if raftNode == nil || raftNode.raft == nil {
 		return nil, ErrRaftNotEnabled
 	}
-	cfgFuture := raftNode.raft.GetConfiguration()
+	return buildClusterInfoForNode(raftNode)
+}
+
+func buildClusterInfoForNode(node *RaftNode) (*ClusterInfo, error) {
+	cfgFuture := node.raft.GetConfiguration()
 	if err := cfgFuture.Error(); err != nil {
 		return nil, fmt.Errorf("get configuration: %w", err)
 	}
 	config := cfgFuture.Configuration()
-	leaderAddr, leaderID := raftNode.raft.LeaderWithID()
+	leaderAddr, leaderID := node.raft.LeaderWithID()
 	info := &ClusterInfo{
 		LeaderID:        string(leaderID),
 		LeaderAddr:      string(leaderAddr),
@@ -348,15 +437,21 @@ func roleFromSuffrage(s raftpkg.ServerSuffrage) ClusterRole {
 
 // ApplyCmdViaRaft replicates an operation through Raft and waits for it to apply.
 func ApplyCmdViaRaft(cmd *Cmd, timeout time.Duration) string {
-	if !RaftEnabled() {
+	raftNodeMu.RLock()
+	defer raftNodeMu.RUnlock()
+	if raftNode == nil || raftNode.raft == nil {
 		// Fallback: apply locally when raft disabled
 		return ExecuteLocally(cmd)
 	}
+	return applyCmdViaRaftNode(raftNode, cmd, timeout)
+}
+
+func applyCmdViaRaftNode(node *RaftNode, cmd *Cmd, timeout time.Duration) string {
 	payload, err := json.Marshal(cmd)
 	if err != nil {
 		return resp.ErrInternal
 	}
-	f := raftNode.raft.Apply(payload, timeout)
+	f := node.raft.Apply(payload, timeout)
 	if err := f.Error(); err != nil {
 		return resp.ErrInternal
 	}

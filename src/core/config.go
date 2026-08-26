@@ -2,10 +2,7 @@ package core
 
 import (
 	"flag"
-	"log"
 	"strings"
-
-	"github.com/rs/xid"
 )
 
 type Config struct {
@@ -27,8 +24,8 @@ var DBConfig *Config
 
 func InitDBConfig() {
 	// raft cluster parameters
-	enableRaft := flag.Bool("enable-raft", false, "enable Hashicorp Raft replication")
-	raftID := flag.String("raft-id", "", "unique Raft node ID")
+	enableRaft := flag.Bool("enable-raft", false, "enable HashiCorp Raft replication")
+	raftID := flag.String("raft-id", "", "unique Raft node ID (required when Raft is enabled)")
 	raftAddr := flag.String("raft-addr", ":7000", "raft TCP bind address (host:port)")
 	// bootstrap := flag.String("bootstrap-peers", "", "bootstrap peers as 'id1=addr1,id2=addr2'")
 	joinAddr := flag.String("join", "", "the cluster node to join")
@@ -97,10 +94,5 @@ func (config *Config) GetDataDir() string {
 // }
 
 func (config *Config) GetRaftId() string {
-	if config.raftID == "" {
-		id := xid.New()
-		log.Println("Generating new raftID:", id.String())
-		config.raftID = id.String()
-	}
-	return config.raftID
+	return strings.TrimSpace(config.raftID)
 }
