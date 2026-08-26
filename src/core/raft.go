@@ -72,7 +72,14 @@ type NotLeaderError struct {
 }
 
 const (
-	OpLeaderChanged = "LEADER_CHANGED"
+	OpLeaderChanged       = "LEADER_CHANGED"
+	raftSnapshotThreshold = uint64(8192)
+	raftSnapshotInterval  = 2 * time.Minute
+	// Keep enough log tail to replay from the oldest regularly spaced retained
+	// snapshot if newer snapshots fail validation during restart.
+	raftSnapshotTrailingLogs = raftSnapshotThreshold * uint64(raftSnapshotRetention-1)
+	fsmSnapshotFormat        = "skiffdb-fsm"
+	fsmSnapshotVersion       = uint64(1)
 )
 
 var leaderAdminAddr = ""
@@ -281,9 +288,9 @@ func initRaftNode(config *Config, stores *raftStores) (*RaftNode, error) {
 	}
 	conf := raftpkg.DefaultConfig()
 	conf.LocalID = raftpkg.ServerID(config.GetRaftId())
-	// Durable snapshots are implemented in issue #4. Until then, prevent the
-	// snapshot loop from compacting logs that are the only restartable copy.
-	conf.SnapshotThreshold = ^uint64(0)
+	conf.SnapshotThreshold = raftSnapshotThreshold
+	conf.SnapshotInterval = raftSnapshotInterval
+	conf.TrailingLogs = raftSnapshotTrailingLogs
 
 	hadExistingState, err := raftpkg.HasExistingState(stores.logStore, stores.stableStore, stores.snapshotStore)
 	if err != nil {
@@ -470,6 +477,21 @@ func applyCmdViaRaftNode(node *RaftNode, cmd *Cmd, timeout time.Duration) string
 	return resp.ErrInternal
 }
 
+// SaveSnapshot requests a local Raft snapshot and waits until the snapshot is
+// durable and Raft has completed its post-snapshot log compaction. When Raft is
+// disabled, SAVE retains its historical no-op behavior.
+func SaveSnapshot() error {
+	raftNodeMu.RLock()
+	defer raftNodeMu.RUnlock()
+	if raftNode == nil || raftNode.raft == nil {
+		return nil
+	}
+	if err := raftNode.raft.Snapshot().Error(); err != nil {
+		return fmt.Errorf("raft snapshot: %w", err)
+	}
+	return nil
+}
+
 // fsm implements raft.FSM, applying log entries to the in-memory DB.
 type fsm struct {
 	db *MemDB
@@ -507,14 +529,36 @@ func (f *fsm) Snapshot() (raftpkg.FSMSnapshot, error) {
 func (f *fsm) Restore(rc io.ReadCloser) error {
 	defer rc.Close()
 	dec := json.NewDecoder(rc)
-	data := make(map[string]string)
-	if err := dec.Decode(&data); err != nil {
-		return err
+	var snapshot fsmSnapshotPayload
+	if err := dec.Decode(&snapshot); err != nil {
+		return fmt.Errorf("decode FSM snapshot: %w", err)
+	}
+	var trailing json.RawMessage
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("decode FSM snapshot: unexpected trailing JSON value")
+		}
+		return fmt.Errorf("decode FSM snapshot trailing data: %w", err)
+	}
+	if snapshot.Format != fsmSnapshotFormat {
+		return fmt.Errorf("unsupported FSM snapshot format %q", snapshot.Format)
+	}
+	if snapshot.Version != fsmSnapshotVersion {
+		return fmt.Errorf("unsupported FSM snapshot version %d", snapshot.Version)
+	}
+	if snapshot.Keyspace == nil {
+		return errors.New("FSM snapshot keyspace is missing")
 	}
 	f.db.mutex.Lock()
 	defer f.db.mutex.Unlock()
-	f.db.keyspace = data
+	f.db.keyspace = snapshot.Keyspace
 	return nil
+}
+
+type fsmSnapshotPayload struct {
+	Format   string            `json:"format"`
+	Version  uint64            `json:"version"`
+	Keyspace map[string]string `json:"keyspace"`
 }
 
 // memSnapshot implements raft.FSMSnapshot
@@ -524,7 +568,12 @@ type memSnapshot struct {
 
 func (m *memSnapshot) Persist(sink raftpkg.SnapshotSink) error {
 	enc := json.NewEncoder(sink)
-	if err := enc.Encode(m.state); err != nil {
+	payload := fsmSnapshotPayload{
+		Format:   fsmSnapshotFormat,
+		Version:  fsmSnapshotVersion,
+		Keyspace: m.state,
+	}
+	if err := enc.Encode(&payload); err != nil {
 		_ = sink.Cancel()
 		return err
 	}

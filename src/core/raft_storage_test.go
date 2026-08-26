@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"net"
 	"os"
 	"os/exec"
@@ -255,11 +254,116 @@ func TestInmemRaftStoresRemainAvailableForTests(t *testing.T) {
 	}
 }
 
-func TestDisabledSnapshotStoreFailsInsteadOfCompactingLogs(t *testing.T) {
-	store := disabledSnapshotStore{}
-	_, err := store.Create(raftpkg.SnapshotVersionMax, 1, 1, raftpkg.Configuration{}, 1, nil)
-	if !errors.Is(err, errRaftSnapshotsDisabled) {
-		t.Fatalf("Create() error = %v, want %v", err, errRaftSnapshotsDisabled)
+func TestPersistentSnapshotStoreUsesAtomicSinkLifecycle(t *testing.T) {
+	config := newTestRaftConfig(t, t.TempDir())
+	stores, err := newPersistentRaftStores(config)
+	if err != nil {
+		t.Fatalf("newPersistentRaftStores() error = %v", err)
+	}
+	defer stores.Close()
+
+	nodeDir, _ := raftNodeDataDir(config)
+	snapshotDir := filepath.Join(nodeDir, raftSnapshotDirectory)
+	assertPermissions(t, snapshotDir, raftDirectoryMode)
+
+	sink, err := stores.snapshotStore.Create(
+		raftpkg.SnapshotVersionMax,
+		1,
+		1,
+		raftpkg.Configuration{},
+		0,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := sink.Write([]byte(`{"format":"skiffdb-fsm","version":1,"keyspace":{"key":"value"}}`)); err != nil {
+		t.Fatalf("snapshot Write() error = %v", err)
+	}
+
+	// FileSnapshotStore writes into a .tmp directory and does not advertise it
+	// until Close has flushed, synced, and atomically renamed it.
+	snapshots, err := stores.snapshotStore.List()
+	if err != nil {
+		t.Fatalf("List() before Close error = %v", err)
+	}
+	if len(snapshots) != 0 {
+		t.Fatalf("List() before Close = %#v, want no selectable snapshots", snapshots)
+	}
+	if err := sink.Close(); err != nil {
+		t.Fatalf("snapshot Close() error = %v", err)
+	}
+	snapshots, err = stores.snapshotStore.List()
+	if err != nil {
+		t.Fatalf("List() after Close error = %v", err)
+	}
+	if len(snapshots) != 1 || snapshots[0].ID != sink.ID() {
+		t.Fatalf("List() after Close = %#v, want snapshot %q", snapshots, sink.ID())
+	}
+	_, reader, err := stores.snapshotStore.Open(sink.ID())
+	if err != nil {
+		t.Fatalf("Open() completed snapshot error = %v", err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatalf("snapshot reader Close() error = %v", err)
+	}
+
+	for index := uint64(2); index <= raftSnapshotRetention+1; index++ {
+		next, err := stores.snapshotStore.Create(
+			raftpkg.SnapshotVersionMax,
+			index,
+			1,
+			raftpkg.Configuration{},
+			0,
+			nil,
+		)
+		if err != nil {
+			t.Fatalf("Create(index=%d) error = %v", index, err)
+		}
+		if _, err := next.Write([]byte(`{"format":"skiffdb-fsm","version":1,"keyspace":{}}`)); err != nil {
+			t.Fatalf("Write(index=%d) error = %v", index, err)
+		}
+		if err := next.Close(); err != nil {
+			t.Fatalf("Close(index=%d) error = %v", index, err)
+		}
+	}
+	snapshots, err = stores.snapshotStore.List()
+	if err != nil {
+		t.Fatalf("List() after retention writes error = %v", err)
+	}
+	if len(snapshots) != raftSnapshotRetention {
+		t.Fatalf("retained snapshot count = %d, want %d", len(snapshots), raftSnapshotRetention)
+	}
+	if _, _, err := stores.snapshotStore.Open(sink.ID()); err == nil {
+		t.Fatalf("oldest snapshot %q was not reaped", sink.ID())
+	}
+}
+
+func TestPersistentSnapshotStoreRejectsOnlyUnreadableFinalizedSnapshots(t *testing.T) {
+	config := newTestRaftConfig(t, t.TempDir())
+	stores, err := newPersistentRaftStores(config)
+	if err != nil {
+		t.Fatalf("initial newPersistentRaftStores() error = %v", err)
+	}
+	if err := stores.Close(); err != nil {
+		t.Fatalf("initial stores.Close() error = %v", err)
+	}
+
+	nodeDir, _ := raftNodeDataDir(config)
+	badSnapshotDir := filepath.Join(nodeDir, raftSnapshotDirectory, "corrupt-finalized")
+	if err := os.MkdirAll(badSnapshotDir, raftDirectoryMode); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(badSnapshotDir, "meta.json"), []byte("not json"), raftDatabaseMode); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err = newPersistentRaftStores(config)
+	if err == nil {
+		t.Fatal("newPersistentRaftStores() accepted an unreadable finalized snapshot")
+	}
+	if !strings.Contains(err.Error(), "none have readable metadata") {
+		t.Fatalf("unreadable snapshot error = %q", err)
 	}
 }
 

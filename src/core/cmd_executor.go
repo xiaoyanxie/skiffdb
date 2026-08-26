@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"log"
 	"skiffdb/src/resp"
 	"strconv"
 	"strings"
@@ -160,7 +161,13 @@ func ExecuteLocally(cmd *Cmd) string {
 	//	SAVE					Manual backup, used in testing/debugging
 	//	FLUSHDB					Used in dev/testing to clear data
 	case "SAVE":
-		// Trigger a snapshot when Raft is enabled; otherwise no-op.
+		if len(cmd.Args) != 0 {
+			return resp.ErrCommandFormatError
+		}
+		if err := SaveSnapshot(); err != nil {
+			log.Printf("SAVE failed: %v", err)
+			return resp.BuildErrorMsg(resp.ErrGeneric, fmt.Sprintf("Snapshot failed: %v", err))
+		}
 		return resp.Ok
 	case "FLUSHDB":
 		// TODO: implement FLUSHDB

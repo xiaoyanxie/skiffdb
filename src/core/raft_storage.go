@@ -15,12 +15,13 @@ import (
 )
 
 const (
-	raftDirectoryMode  = 0o700
-	raftDatabaseMode   = 0o600
-	raftStoreOpenDelay = time.Second
+	raftDirectoryMode            = 0o700
+	raftDatabaseMode             = 0o600
+	raftStoreOpenDelay           = time.Second
+	raftSnapshotRetention        = 3
+	raftSnapshotDirectory        = "snapshots"
+	raftIncompleteSnapshotSuffix = ".tmp"
 )
-
-var errRaftSnapshotsDisabled = errors.New("durable raft snapshots are not implemented")
 
 // raftStores groups the storage interfaces Raft requires and owns their
 // lifecycle. Production uses a single bbolt-backed store for both the log and
@@ -70,13 +71,52 @@ func newPersistentRaftStores(config *Config) (*raftStores, error) {
 		_ = store.Close()
 		return nil, fmt.Errorf("set raft database permissions on %q: %w", dbPath, err)
 	}
+	snapshotStore, err := raftpkg.NewFileSnapshotStore(nodeDir, raftSnapshotRetention, io.Discard)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("open raft snapshot store in %q: %w", nodeDir, err)
+	}
+	snapshotDir := filepath.Join(nodeDir, raftSnapshotDirectory)
+	if err := os.Chmod(snapshotDir, raftDirectoryMode); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("set raft snapshot directory permissions on %q: %w", snapshotDir, err)
+	}
+	if err := rejectUnreadableFinalizedSnapshots(snapshotDir, snapshotStore); err != nil {
+		_ = store.Close()
+		return nil, err
+	}
 
 	return &raftStores{
 		logStore:      store,
 		stableStore:   store,
-		snapshotStore: disabledSnapshotStore{},
+		snapshotStore: snapshotStore,
 		closer:        store,
 	}, nil
+}
+
+// rejectUnreadableFinalizedSnapshots closes a gap in FileSnapshotStore.List:
+// malformed metadata is skipped by that method. If every finalized snapshot
+// is malformed, treating the store as snapshot-free could start the FSM with
+// empty state after its older logs have already been compacted.
+func rejectUnreadableFinalizedSnapshots(snapshotDir string, store raftpkg.SnapshotStore) error {
+	snapshots, err := store.List()
+	if err != nil {
+		return fmt.Errorf("list raft snapshots in %q: %w", snapshotDir, err)
+	}
+	if len(snapshots) > 0 {
+		return nil
+	}
+
+	entries, err := os.ReadDir(snapshotDir)
+	if err != nil {
+		return fmt.Errorf("scan raft snapshots in %q: %w", snapshotDir, err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() && !strings.HasSuffix(entry.Name(), raftIncompleteSnapshotSuffix) {
+			return fmt.Errorf("raft snapshot store %q contains finalized snapshots but none have readable metadata", snapshotDir)
+		}
+	}
+	return nil
 }
 
 func newInmemRaftStores() *raftStores {
@@ -100,29 +140,4 @@ func raftNodeDataDir(config *Config) (string, error) {
 		return "", fmt.Errorf("invalid --raft-id %q: path separators are not allowed", nodeID)
 	}
 	return filepath.Join(config.GetDataDir(), "raft", nodeID), nil
-}
-
-// disabledSnapshotStore makes the issue #3 boundary explicit. A discard
-// snapshot store reports success and lets Raft compact durable logs even though
-// no restartable snapshot exists. Issue #4 will replace this implementation
-// with a file-backed snapshot store.
-type disabledSnapshotStore struct{}
-
-func (disabledSnapshotStore) Create(
-	raftpkg.SnapshotVersion,
-	uint64,
-	uint64,
-	raftpkg.Configuration,
-	uint64,
-	raftpkg.Transport,
-) (raftpkg.SnapshotSink, error) {
-	return nil, errRaftSnapshotsDisabled
-}
-
-func (disabledSnapshotStore) List() ([]*raftpkg.SnapshotMeta, error) {
-	return nil, nil
-}
-
-func (disabledSnapshotStore) Open(string) (*raftpkg.SnapshotMeta, io.ReadCloser, error) {
-	return nil, nil, errRaftSnapshotsDisabled
 }

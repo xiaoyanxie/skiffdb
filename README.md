@@ -95,6 +95,7 @@ stored beneath the configured data directory:
 
 ```text
 <data-dir>/raft/<raft-id>/raft.db
+<data-dir>/raft/<raft-id>/snapshots/
 ```
 
 The node directory is created with mode `0700` and the bbolt database with mode
@@ -110,11 +111,13 @@ write until HashiCorp Raft reports that it is committed and applied. This policy
 assumes the operating system, filesystem, and storage device honor their normal
 fsync durability contract.
 
-Durable FSM snapshots are tracked separately. Until they are implemented,
-automatic Raft snapshotting and log compaction are disabled. A restart therefore
-preserves the Raft log, current term, vote, and cluster configuration, but does
-not yet restore the in-memory user keyspace. Graceful shutdown stops Raft first,
-then closes its TCP transport and bbolt store.
+FSM snapshots use an atomic file-backed store with checksums. Three completed
+snapshots are retained, and Raft checks every two minutes whether at least 8192
+new log entries need to be snapshotted. The newest valid snapshot is restored on
+restart before the remaining log tail is replayed. `SAVE` requests the same
+durable Raft snapshot synchronously and reports an error unless it completes.
+Graceful shutdown stops Raft first, then closes its TCP transport and bbolt
+store.
 
 ### 3) Run With Config file (TOML)
 You can also run with a config file:
