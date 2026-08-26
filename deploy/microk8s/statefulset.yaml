@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: skiffdb
+  labels:
+    app.kubernetes.io/name: skiffdb
+    app.kubernetes.io/part-of: skiffdb-benchmark
+    app.kubernetes.io/managed-by: skiffdb-microk8s
+spec:
+  serviceName: skiffdb-headless
+  replicas: 3
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: skiffdb
+      app.kubernetes.io/part-of: skiffdb-benchmark
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: skiffdb
+        app.kubernetes.io/part-of: skiffdb-benchmark
+        app.kubernetes.io/managed-by: skiffdb-microk8s
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: skiffdb
+                    app.kubernetes.io/part-of: skiffdb-benchmark
+      containers:
+        - name: skiffdb
+          image: localhost:32000/skiffdb:microk8s
+          imagePullPolicy: Always
+          command: ["/opt/skiffdb/start.sh"]
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: resp
+              containerPort: 6379
+            - name: admin
+              containerPort: 50051
+            - name: raft
+              containerPort: 7000
+          startupProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 3
+            timeoutSeconds: 1
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: resp
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: startup
+              mountPath: /opt/skiffdb
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/skiffdb
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: startup
+          configMap:
+            name: skiffdb-startup
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: skiffdb
+          app.kubernetes.io/part-of: skiffdb-benchmark
+          app.kubernetes.io/managed-by: skiffdb-microk8s
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: microk8s-hostpath
+        resources:
+          requests:
+            storage: 1Gi

@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: skiffdb-startup
+  labels:
+    app.kubernetes.io/name: skiffdb
+    app.kubernetes.io/part-of: skiffdb-benchmark
+    app.kubernetes.io/managed-by: skiffdb-microk8s
+data:
+  start.sh: |
+    #!/bin/sh
+    set -eu
+
+    : "${POD_NAMESPACE:?POD_NAMESPACE is required}"
+    node_id="${HOSTNAME}"
+    stable_host="${HOSTNAME}.skiffdb-headless.${POD_NAMESPACE}.svc.cluster.local"
+
+    set -- \
+      --addr=0.0.0.0:6379 \
+      --admin-addr=0.0.0.0:50051 \
+      --data-dir=/var/lib/skiffdb \
+      --enable-raft \
+      --raft-id="${node_id}" \
+      --raft-addr=0.0.0.0:7000 \
+      --raft-advertise-addr="${stable_host}:7000" \
+      --log-requests=false
+
+    if [ ! -f /var/lib/skiffdb/raft/node.json ]; then
+      case "${HOSTNAME}" in
+        skiffdb-0)
+          set -- "$@" --bootstrap
+          ;;
+        skiffdb-1|skiffdb-2)
+          set -- "$@" --join="skiffdb-0.skiffdb-headless.${POD_NAMESPACE}.svc.cluster.local:50051"
+          ;;
+        *)
+          echo "unexpected StatefulSet pod name: ${HOSTNAME}" >&2
+          exit 1
+          ;;
+      esac
+    fi
+
+    exec /usr/local/bin/skiffdb-server "$@"

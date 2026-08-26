@@ -16,8 +16,10 @@ type Options struct {
 	Warmup        time.Duration
 	Concurrency   int
 	PipelineDepth int
+	KeyCount      int
 	Seed          int64
 	KeepData      bool
+	Orchestration string
 }
 
 type Profile struct {
@@ -58,6 +60,7 @@ type Metadata struct {
 	Filesystem        string             `json:"filesystem,omitempty"`
 	RandomSeed        int64              `json:"random_seed"`
 	Profile           string             `json:"profile"`
+	Orchestration     string             `json:"orchestration"`
 	HotRequestLogging bool               `json:"hot_path_request_logging"`
 	Parameters        map[string]any     `json:"parameters"`
 	Configurations    []DeploymentConfig `json:"skiffdb_configurations"`

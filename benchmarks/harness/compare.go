@@ -24,6 +24,10 @@ func Compare(baselineDir, candidateDir, outputDir string) (Comparison, error) {
 		comparison.Comparable = false
 		comparison.Warnings = append(comparison.Warnings, "host OS, architecture, or CPU count differs")
 	}
+	if orchestrationIdentity(baselineMetadata.Orchestration) != orchestrationIdentity(candidateMetadata.Orchestration) {
+		comparison.Comparable = false
+		comparison.Warnings = append(comparison.Warnings, "benchmark orchestration modes differ")
+	}
 	if baselineMetadata.GoVersion != candidateMetadata.GoVersion {
 		comparison.Comparable = false
 		comparison.Warnings = append(comparison.Warnings, "Go versions differ")
@@ -91,6 +95,13 @@ func Compare(baselineDir, candidateDir, outputDir string) (Comparison, error) {
 		return comparison, err
 	}
 	return comparison, nil
+}
+
+func orchestrationIdentity(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "local-process"
+	}
+	return strings.TrimSpace(value)
 }
 
 func sameMetricKeys(left, right map[string]comparableValue) bool {
