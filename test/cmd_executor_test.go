@@ -3,8 +3,41 @@ package test
 import (
 	"skiffdb/src/core"
 	"skiffdb/src/resp"
+	"strings"
 	"testing"
 )
+
+func TestWriteCommandsAreClassifiedCaseInsensitively(t *testing.T) {
+	writeCommands := []struct {
+		op   string
+		args []string
+	}{
+		{op: "SET", args: []string{"key", "value"}},
+		{op: "DEL", args: []string{"key"}},
+		{op: "INCR", args: []string{"key"}},
+		{op: "DECR", args: []string{"key"}},
+		{op: "INCRBY", args: []string{"key", "2"}},
+	}
+
+	for _, command := range writeCommands {
+		variants := []string{
+			command.op,
+			strings.ToLower(command.op),
+			strings.ToUpper(command.op[:1]) + strings.ToLower(command.op[1:]),
+		}
+		for _, variant := range variants {
+			t.Run(variant, func(t *testing.T) {
+				cmd, err := core.BuildCmd(append([]string{variant}, command.args...))
+				if err != nil {
+					t.Fatalf("BuildCmd() error = %v", err)
+				}
+				if !cmd.IsWriteOp() {
+					t.Errorf("command %q was classified as a read and would bypass Raft", variant)
+				}
+			})
+		}
+	}
+}
 
 func TestExecuteCmd(t *testing.T) {
 	type args struct {

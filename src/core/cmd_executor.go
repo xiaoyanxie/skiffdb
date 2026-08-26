@@ -42,12 +42,12 @@ func BuildCmd(args []string) (*Cmd, error) {
 	}
 	if len(args) == 1 {
 		return &Cmd{
-			Op:   args[0],
+			Op:   strings.ToUpper(args[0]),
 			Args: []string{},
 		}, nil
 	} else {
 		return &Cmd{
-			Op:   args[0],
+			Op:   strings.ToUpper(args[0]),
 			Args: args[1:],
 		}, nil
 	}
@@ -55,7 +55,7 @@ func BuildCmd(args []string) (*Cmd, error) {
 
 // ExecuteLocally applies the operation directly to the local DB (no Raft).
 func ExecuteLocally(cmd *Cmd) string {
-	switch strings.ToUpper(cmd.Op) {
+	switch cmd.Op {
 	case "PING":
 		if len(cmd.Args) == 0 {
 			return resp.Pong
