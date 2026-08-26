@@ -6,10 +6,12 @@ import (
 )
 
 type Config struct {
-	EnableRaft bool
-	raftID     string
-	RaftAddr   string
-	JoinAddr   string
+	EnableRaft        bool
+	Bootstrap         bool
+	raftID            string
+	RaftAddr          string
+	RaftAdvertiseAddr string
+	JoinAddr          string
 
 	// bootstrap string
 	// peers     *map[string]string
@@ -25,8 +27,10 @@ var DBConfig *Config
 func InitDBConfig() {
 	// raft cluster parameters
 	enableRaft := flag.Bool("enable-raft", false, "enable HashiCorp Raft replication")
-	raftID := flag.String("raft-id", "", "unique Raft node ID (required when Raft is enabled)")
+	bootstrap := flag.Bool("bootstrap", false, "bootstrap a new Raft cluster (new storage only)")
+	raftID := flag.String("raft-id", "", "unique Raft node ID (required on first start; reused from disk on restart)")
 	raftAddr := flag.String("raft-addr", ":7000", "raft TCP bind address (host:port)")
+	raftAdvertiseAddr := flag.String("raft-advertise-addr", "", "Raft address advertised to peers (defaults to --raft-addr)")
 	// bootstrap := flag.String("bootstrap-peers", "", "bootstrap peers as 'id1=addr1,id2=addr2'")
 	joinAddr := flag.String("join", "", "the cluster node to join")
 
@@ -41,10 +45,12 @@ func InitDBConfig() {
 	flag.Parse()
 
 	DBConfig = &Config{
-		EnableRaft: *enableRaft,
-		raftID:     strings.TrimSpace(*raftID),
-		RaftAddr:   strings.TrimSpace(*raftAddr),
-		JoinAddr:   strings.TrimSpace(*joinAddr),
+		EnableRaft:        *enableRaft,
+		Bootstrap:         *bootstrap,
+		raftID:            strings.TrimSpace(*raftID),
+		RaftAddr:          strings.TrimSpace(*raftAddr),
+		RaftAdvertiseAddr: strings.TrimSpace(*raftAdvertiseAddr),
+		JoinAddr:          strings.TrimSpace(*joinAddr),
 
 		AdminAddr: strings.TrimSpace(*adminAddr),
 
@@ -95,4 +101,15 @@ func (config *Config) GetDataDir() string {
 
 func (config *Config) GetRaftId() string {
 	return strings.TrimSpace(config.raftID)
+}
+
+func (config *Config) setRaftID(nodeID string) {
+	config.raftID = strings.TrimSpace(nodeID)
+}
+
+func (config *Config) GetRaftAdvertiseAddr() string {
+	if advertised := strings.TrimSpace(config.RaftAdvertiseAddr); advertised != "" {
+		return advertised
+	}
+	return strings.TrimSpace(config.RaftAddr)
 }

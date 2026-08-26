@@ -56,6 +56,10 @@ func BuildCmd(args []string) (*Cmd, error) {
 
 // ExecuteLocally applies the operation directly to the local DB (no Raft).
 func ExecuteLocally(cmd *Cmd) string {
+	return executeOnDB(&memdb, cmd)
+}
+
+func executeOnDB(db *MemDB, cmd *Cmd) string {
 	switch cmd.Op {
 	case "PING":
 		if len(cmd.Args) == 0 {
@@ -66,24 +70,24 @@ func ExecuteLocally(cmd *Cmd) string {
 		if len(cmd.Args) != 2 {
 			return resp.ErrCommandFormatError
 		}
-		memdb.Set(cmd.Args[0], cmd.Args[1])
+		db.Set(cmd.Args[0], cmd.Args[1])
 		return resp.Ok
 	case "GET":
 		if len(cmd.Args) != 1 {
 			return resp.ErrCommandFormatError
 		}
-		return resp.BuildBulkString(memdb.Get(cmd.Args[0]))
+		return resp.BuildBulkString(db.Get(cmd.Args[0]))
 	case "DEL":
 		if len(cmd.Args) != 1 {
 			return resp.ErrCommandFormatError
 		}
-		memdb.Delete(cmd.Args[0])
+		db.Delete(cmd.Args[0])
 		return resp.Ok
 	case "INCR":
 		if len(cmd.Args) != 1 {
 			return resp.ErrCommandFormatError
 		}
-		err := memdb.Incr(cmd.Args[0], 1)
+		err := db.Incr(cmd.Args[0], 1)
 		if err != nil {
 			return resp.ErrWrongDataType
 		}
@@ -92,7 +96,7 @@ func ExecuteLocally(cmd *Cmd) string {
 		if len(cmd.Args) != 1 {
 			return resp.ErrCommandFormatError
 		}
-		err := memdb.Incr(cmd.Args[0], -1)
+		err := db.Incr(cmd.Args[0], -1)
 		if err != nil {
 			return resp.ErrWrongDataType
 		}
@@ -105,7 +109,7 @@ func ExecuteLocally(cmd *Cmd) string {
 		if err != nil {
 			return resp.ErrCommandFormatError
 		}
-		err = memdb.Incr(cmd.Args[0], delta)
+		err = db.Incr(cmd.Args[0], delta)
 		if err != nil {
 			return resp.ErrWrongDataType
 		}
@@ -114,7 +118,7 @@ func ExecuteLocally(cmd *Cmd) string {
 		if len(cmd.Args) < 1 {
 			return resp.ErrCommandFormatError
 		}
-		cnt := memdb.CountKeys(cmd.Args)
+		cnt := db.CountKeys(cmd.Args)
 		return resp.BuildInteger(cnt)
 
 	/*********** Time-to-Live (TTL) Commands ***********/

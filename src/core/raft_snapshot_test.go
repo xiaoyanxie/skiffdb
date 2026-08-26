@@ -194,8 +194,7 @@ func TestRaftRestoreFallsBackFromCorruptLatestSnapshot(t *testing.T) {
 	}
 
 	ResetMemDB()
-	config.JoinAddr = "127.0.0.1:1"
-	config.RaftAddr = unusedTCPAddress(t)
+	config.Bootstrap = false
 	restartContext, cancelRestart := context.WithCancel(context.Background())
 	t.Cleanup(cancelRestart)
 	if err := StartRaft(restartContext, config); err != nil {
@@ -236,8 +235,7 @@ func TestRaftRestoreIgnoresIncompleteLatestSnapshot(t *testing.T) {
 	}
 
 	ResetMemDB()
-	config.JoinAddr = "127.0.0.1:1"
-	config.RaftAddr = unusedTCPAddress(t)
+	config.Bootstrap = false
 	restartContext, cancelRestart := context.WithCancel(context.Background())
 	t.Cleanup(cancelRestart)
 	if err := StartRaft(restartContext, config); err != nil {
@@ -277,8 +275,7 @@ func restartSingleTestRaft(t *testing.T, config *Config) {
 		t.Fatalf("ShutdownRaft() error = %v", err)
 	}
 	ResetMemDB()
-	config.JoinAddr = "127.0.0.1:1"
-	config.RaftAddr = unusedTCPAddress(t)
+	config.Bootstrap = false
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	if err := StartRaft(ctx, config); err != nil {

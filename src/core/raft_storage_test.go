@@ -439,9 +439,8 @@ func TestRaftStateSurvivesRestart(t *testing.T) {
 		t.Fatalf("persisted stores Close() error = %v", err)
 	}
 
-	// An initialized node must not try to join or bootstrap again. Keeping an
-	// unreachable JoinAddr here makes an accidental rejoin fail the test.
-	config.JoinAddr = "127.0.0.1:1"
+	// An initialized node restarts without repeating its one-time bootstrap.
+	config.Bootstrap = false
 	secondContext, cancelSecond := context.WithCancel(context.Background())
 	defer cancelSecond()
 	if err := StartRaft(secondContext, config); err != nil {
@@ -482,6 +481,7 @@ func newTestRaftConfig(t *testing.T, dataDir string) *Config {
 	t.Helper()
 	return &Config{
 		EnableRaft: true,
+		Bootstrap:  true,
 		raftID:     "test-node",
 		RaftAddr:   "127.0.0.1:0",
 		dataDir:    dataDir,

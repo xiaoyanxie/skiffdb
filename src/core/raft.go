@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"skiffdb/proto/cluster"
 	"skiffdb/src/resp"
 
@@ -30,6 +31,7 @@ type RaftNode struct {
 	transport        *raftpkg.NetworkTransport
 	stores           *raftStores
 	hadExistingState bool
+	initialized      bool
 	closeOnce        sync.Once
 	closeErr         error
 }
@@ -131,6 +133,15 @@ func StartRaft(ctx context.Context, config *Config) error {
 		log.Default().Printf("config.EnableRaft is false, ignored")
 		return nil
 	}
+	identity, hadPersistedIdentity, err := resolveRaftIdentity(config)
+	if err != nil {
+		return err
+	}
+	advertisedAddress, err := normalizeRaftAdvertiseAddr(config.GetRaftAdvertiseAddr())
+	if err != nil {
+		return err
+	}
+	config.RaftAdvertiseAddr = advertisedAddress
 
 	stores, err := newPersistentRaftStores(config)
 	if err != nil {
@@ -142,19 +153,49 @@ func StartRaft(ctx context.Context, config *Config) error {
 		_ = stores.Close()
 		return err
 	}
+	config.RaftAdvertiseAddr = string(node.transport.LocalAddr())
+	if hadPersistedIdentity && identity.AdvertiseAddr != config.GetRaftAdvertiseAddr() {
+		closeErr := node.Close()
+		return errors.Join(fmt.Errorf("Raft advertised address %q conflicts with persisted address %q; remove and re-add the member with a new identity to change its advertised address", config.GetRaftAdvertiseAddr(), identity.AdvertiseAddr), closeErr)
+	}
 
-	if !node.hadExistingState {
-		if config.JoinAddr == "" {
-			err = createNewCluster(node, config)
-		} else {
-			err = joinCluster(ctx, config)
-		}
+	node.initialized, err = validatePersistedRaftConfiguration(node, config)
+	if err != nil {
+		closeErr := node.Close()
+		return errors.Join(err, closeErr)
+	}
+	if hadPersistedIdentity && !node.initialized {
+		closeErr := node.Close()
+		return errors.Join(errors.New("persisted Raft identity exists but the local store has no cluster configuration"), closeErr)
+	}
+	if err := validateRaftStartupIntent(config, node.initialized); err != nil {
+		closeErr := node.Close()
+		return errors.Join(err, closeErr)
+	}
+
+	if node.initialized {
+		log.Printf("Reopened existing Raft state for node %s", config.GetRaftId())
+	} else if config.Bootstrap {
+		err = createNewCluster(node, config)
+	} else {
+		err = joinCluster(ctx, config)
+	}
+	if err != nil {
+		closeErr := node.Close()
+		return errors.Join(err, closeErr)
+	}
+	if !node.initialized {
+		node.initialized, err = waitForLocalRaftConfiguration(ctx, node, config, 30*time.Second)
 		if err != nil {
 			closeErr := node.Close()
 			return errors.Join(err, closeErr)
 		}
-	} else {
-		log.Printf("Reopened existing Raft state for node %s", config.GetRaftId())
+	}
+	if !hadPersistedIdentity {
+		if err := persistRaftIdentity(config, string(node.transport.LocalAddr())); err != nil {
+			closeErr := node.Close()
+			return errors.Join(err, closeErr)
+		}
 	}
 
 	raftNode = node
@@ -208,7 +249,7 @@ func createNewCluster(node *RaftNode, config *Config) error {
 		{
 			Suffrage: raftpkg.Voter,
 			ID:       *node.localID,
-			Address:  raftpkg.ServerAddress(config.RaftAddr),
+			Address:  node.transport.LocalAddr(),
 		},
 	}})
 	if err := confFuture.Error(); err != nil {
@@ -233,7 +274,7 @@ func joinCluster(ctx context.Context, config *Config) error {
 		log.Println("Sending JoinClusterRequest.")
 		response, err := client.JoinCluster(ctx, &cluster.JoinClusterRequest{
 			NodeId: config.GetRaftId(),
-			Addr:   config.RaftAddr,
+			Addr:   config.GetRaftAdvertiseAddr(),
 		})
 
 		// check error
@@ -283,8 +324,15 @@ func joinCluster(ctx context.Context, config *Config) error {
 }
 
 func initRaftNode(config *Config, stores *raftStores) (*RaftNode, error) {
+	return initRaftNodeWithDB(config, stores, &memdb)
+}
+
+func initRaftNodeWithDB(config *Config, stores *raftStores, db *MemDB) (*RaftNode, error) {
 	if stores == nil || stores.logStore == nil || stores.stableStore == nil || stores.snapshotStore == nil {
 		return nil, errors.New("raft stores are required")
+	}
+	if db == nil {
+		return nil, errors.New("Raft FSM database is required")
 	}
 	conf := raftpkg.DefaultConfig()
 	conf.LocalID = raftpkg.ServerID(config.GetRaftId())
@@ -297,12 +345,20 @@ func initRaftNode(config *Config, stores *raftStores) (*RaftNode, error) {
 		return nil, fmt.Errorf("inspect existing raft state: %w", err)
 	}
 
-	transport, err := raftpkg.NewTCPTransport(config.RaftAddr, nil, 3, 10*time.Second, nil)
+	advertisedAddress, err := net.ResolveTCPAddr("tcp", config.GetRaftAdvertiseAddr())
+	if err != nil {
+		return nil, fmt.Errorf("resolve Raft advertised address %q: %w", config.GetRaftAdvertiseAddr(), err)
+	}
+	var advertised net.Addr = advertisedAddress
+	if advertisedAddress.Port == 0 {
+		advertised = nil
+	}
+	transport, err := raftpkg.NewTCPTransport(config.RaftAddr, advertised, 3, 10*time.Second, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TCP transport: %w", err)
 	}
 
-	fsm := &fsm{db: &memdb}
+	fsm := &fsm{db: db}
 
 	r, err := raftpkg.NewRaft(conf, fsm, stores.logStore, stores.stableStore, stores.snapshotStore, transport)
 	if err != nil {
@@ -317,6 +373,81 @@ func initRaftNode(config *Config, stores *raftStores) (*RaftNode, error) {
 		stores:           stores,
 		hadExistingState: hadExistingState,
 	}, nil
+}
+
+func normalizeRaftAdvertiseAddr(address string) (string, error) {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return "", errors.New("--raft-advertise-addr or --raft-addr is required when Raft is enabled")
+	}
+	resolved, err := net.ResolveTCPAddr("tcp", address)
+	if err != nil {
+		return "", fmt.Errorf("resolve Raft advertised address %q: %w", address, err)
+	}
+	if resolved.IP == nil || resolved.IP.IsUnspecified() {
+		return "", fmt.Errorf("Raft advertised address %q is not routable; set --raft-advertise-addr to a peer-reachable address", address)
+	}
+	return resolved.String(), nil
+}
+
+func validateRaftStartupIntent(config *Config, initialized bool) error {
+	hasJoin := strings.TrimSpace(config.JoinAddr) != ""
+	if initialized {
+		if config.Bootstrap || hasJoin {
+			return errors.New("existing Raft state must be restarted without --bootstrap or --join")
+		}
+		return nil
+	}
+	if config.Bootstrap == hasJoin {
+		return errors.New("new Raft state requires exactly one of --bootstrap or --join")
+	}
+	return nil
+}
+
+func validatePersistedRaftConfiguration(node *RaftNode, config *Config) (bool, error) {
+	future := node.raft.GetConfiguration()
+	if err := future.Error(); err != nil {
+		return false, fmt.Errorf("read persisted Raft configuration: %w", err)
+	}
+	servers := future.Configuration().Servers
+	if len(servers) == 0 {
+		return false, nil
+	}
+	nodeID := raftpkg.ServerID(config.GetRaftId())
+	advertisedAddress := raftpkg.ServerAddress(config.GetRaftAdvertiseAddr())
+	for _, server := range servers {
+		if server.ID != nodeID {
+			continue
+		}
+		if server.Address != advertisedAddress {
+			return false, fmt.Errorf("persisted Raft member %q uses address %q, not configured address %q; remove and re-add the member with a new identity to change its advertised address", nodeID, server.Address, advertisedAddress)
+		}
+		return true, nil
+	}
+	return false, fmt.Errorf("persisted Raft configuration does not contain local node identity %q", nodeID)
+}
+
+func waitForLocalRaftConfiguration(ctx context.Context, node *RaftNode, config *Config, timeout time.Duration) (bool, error) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		initialized, err := validatePersistedRaftConfiguration(node, config)
+		if err != nil {
+			return false, err
+		}
+		if initialized {
+			return true, nil
+		}
+		select {
+		case <-ctx.Done():
+			return false, fmt.Errorf("wait for local Raft configuration: %w", ctx.Err())
+		case <-timer.C:
+			return false, errors.New("timed out waiting for the local node to receive its Raft configuration")
+		case <-ticker.C:
+		}
+	}
 }
 
 func observeClusterLeaderChange(ctx context.Context, node *RaftNode) {
@@ -388,14 +519,43 @@ func JoinCluster(nodeID string, addr string) (*ClusterInfo, error) {
 			LeaderAdminAddr: leaderAdminAddr,
 		}
 	}
-	if strings.TrimSpace(nodeID) == "" || strings.TrimSpace(addr) == "" {
+	nodeID = strings.TrimSpace(nodeID)
+	addr = strings.TrimSpace(addr)
+	if nodeID == "" || addr == "" {
 		return nil, fmt.Errorf("node id and address are required")
+	}
+	alreadyMember, err := validateJoiningMember(raftNode, nodeID, addr)
+	if err != nil {
+		return nil, err
+	}
+	if alreadyMember {
+		return buildClusterInfoForNode(raftNode)
 	}
 	future := raftNode.raft.AddNonvoter(raftpkg.ServerID(nodeID), raftpkg.ServerAddress(addr), 0, 30*time.Second)
 	if err := future.Error(); err != nil {
 		return nil, fmt.Errorf("add nonvoter: %w", err)
 	}
 	return buildClusterInfoForNode(raftNode)
+}
+
+func validateJoiningMember(node *RaftNode, nodeID, addr string) (bool, error) {
+	future := node.raft.GetConfiguration()
+	if err := future.Error(); err != nil {
+		return false, fmt.Errorf("get configuration before join: %w", err)
+	}
+	wantedID := raftpkg.ServerID(nodeID)
+	wantedAddress := raftpkg.ServerAddress(addr)
+	for _, server := range future.Configuration().Servers {
+		switch {
+		case server.ID == wantedID && server.Address == wantedAddress:
+			return true, nil
+		case server.ID == wantedID:
+			return false, fmt.Errorf("Raft node identity %q is already registered at address %q", nodeID, server.Address)
+		case server.Address == wantedAddress:
+			return false, fmt.Errorf("Raft address %q is already registered to node %q", addr, server.ID)
+		}
+	}
+	return false, nil
 }
 
 // buildClusterInfo materialises the current configuration for RPC responses.
@@ -509,7 +669,7 @@ func (f *fsm) Apply(l *raftpkg.Log) interface{} {
 		leaderAdminAddr = cmd.Args[0]
 		return resp.Ok
 	default:
-		return ExecuteLocally(&cmd)
+		return executeOnDB(f.db, &cmd)
 	}
 }
 

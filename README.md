@@ -17,7 +17,7 @@ Skiffdb is a lightweight, Redis-protocol (RESP) key-value store designed as a **
 ## Current highlights
 - RESP server with common commands (`GET`/`SET`/`DEL`/`EXPIRE`/`TTL`/`EXISTS`/`INCR`/`DECR`, simple Lists/Hashes, `PING`).
 - TTLs with lazy expiration (active sweeps on the roadmap).
-- Basic HA scaffolding with durable Raft log and consensus state; FSM snapshot recovery is still WIP.
+- Basic HA scaffolding with durable Raft log, consensus state, and FSM snapshot recovery.
 - Simple in-memory engine (map + locks) — easy to hack, easy to profile.
 
 ## Getting Started
@@ -56,6 +56,7 @@ Terminal A:
   --maxmemory=1GB \
   --admin-addr=:7002 \
   --enable-raft \
+  --bootstrap \
   --raft-id=node-8001 \
   --raft-addr=127.0.0.1:8001
 ```
@@ -88,21 +89,41 @@ Terminal C:
 
 Point clients at the leader (Skiffdb will log which node is leader) for linearizable writes. Stale reads from followers may be allowed for cache workloads (depending on config).
 
-### Raft storage and restart behavior
+### Raft bootstrap, storage, and restart behavior
 
-Raft-enabled nodes require a stable, explicit `--raft-id`. Consensus state is
-stored beneath the configured data directory:
+Creating a cluster is an explicit one-time operation. Use `--bootstrap` only
+for the first node of a genuinely new cluster. Every other new node must use
+`--join=<leader-admin-address>`. Supplying neither option for new storage, or
+supplying both, fails startup. Never copy a data directory between clusters.
+
+The first start requires a stable, explicit `--raft-id`. SkiffDB persists that
+identity and the peer-advertised Raft address, then reuses the ID when
+`--raft-id` is omitted on restart. Consensus state is stored as follows:
 
 ```text
+<data-dir>/raft/node.json
 <data-dir>/raft/<raft-id>/raft.db
 <data-dir>/raft/<raft-id>/snapshots/
 ```
 
-The node directory is created with mode `0700` and the bbolt database with mode
-`0600`. bbolt holds an exclusive file lock while the node is running; a second
-process using the same data directory and Raft ID fails startup after a bounded
-timeout. On restart, an initialized store is reopened without bootstrapping or
-joining the cluster again.
+The Raft directories are created with mode `0700`; `node.json` and the bbolt
+database use mode `0600`. bbolt holds an exclusive file lock while the node is
+running, so a second process using the same data directory and Raft ID fails
+startup after a bounded timeout. On restart, an initialized store is reopened
+from its persisted Raft configuration. Omit both `--bootstrap` and `--join`;
+either option is rejected as a stale/conflicting startup request, so existing
+state can never silently bootstrap an independent empty cluster.
+
+`--raft-addr` controls the local bind address. Set
+`--raft-advertise-addr` when peers must use a different, routable address; it
+defaults to `--raft-addr`. The advertised address is part of the persisted
+member identity and cannot change in place. A changed advertised address or a
+different `--raft-id` fails closed. The bind interface may change only when the
+persisted advertised address remains identical and still routes to that
+listener; pass `--raft-advertise-addr` explicitly in that case. Advertised
+address replacement is not supported by the current membership API and is
+tracked separately; restore the original address rather than editing
+`node.json` or the Raft database manually.
 
 Raft log and stable-state writes use `raft-boltdb/v2` with `NoSync=false`.
 Consequently, each completed bbolt write transaction synchronizes the database
@@ -118,6 +139,27 @@ restart before the remaining log tail is replayed. `SAVE` requests the same
 durable Raft snapshot synchronously and reports an error unless it completes.
 Graceful shutdown stops Raft first, then closes its TCP transport and bbolt
 store.
+
+#### Restarting one member
+
+Stop the process cleanly when possible, retain its complete `--data-dir`, and
+restart it with the same bind/advertised addresses. Omit `--bootstrap`,
+`--join`, and optionally `--raft-id`. The member resumes with its persisted ID
+and configuration and catches up from retained logs or an installed snapshot;
+it is not added to membership a second time.
+
+#### Restarting a fully stopped cluster
+
+1. Preserve every voter's complete data directory. Do not delete or copy Raft
+   state and do not select a new bootstrap node.
+2. Start all voters, in any order, with their original advertised addresses and
+   with both `--bootstrap` and `--join` omitted.
+3. Wait for a normal election and quorum before sending writes. A leader cannot
+   be elected until a majority of the persisted voters are running.
+
+This procedure does not recover a cluster after permanent loss of a majority.
+Unsafe quorum recovery, cross-cluster restore, and address rewriting are not
+supported.
 
 ### 3) Run With Config file (TOML)
 You can also run with a config file:
