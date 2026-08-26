@@ -65,7 +65,7 @@ func (s *raftClusterAdminServer) JoinCluster(ctx context.Context, req *cluster.J
 	}
 
 	log.Printf("Received JoinClusterRequest node_id=%s addr=%s", nodeID, addr)
-	info, err := core.JoinCluster(nodeID, addr)
+	info, err := core.JoinClusterWithProgress(nodeID, addr, req.GetAppliedIndex())
 	if err != nil {
 		if errors.Is(err, core.ErrRaftNotEnabled) {
 			return &cluster.JoinClusterResponse{Code: cluster.JoinClusterResponseCode_RAFT_NOT_ENABLED, Cluster: toProtoCluster(info)}, nil
@@ -87,14 +87,34 @@ func toProtoCluster(info *core.ClusterInfo) *cluster.ClusterInfo {
 	members := make([]*cluster.ClusterMember, 0, len(info.Members))
 	for _, member := range info.Members {
 		members = append(members, &cluster.ClusterMember{
-			NodeId: member.NodeID,
-			Addr:   member.Addr,
-			Role:   toProtoRole(member.Role),
+			NodeId:       member.NodeID,
+			Addr:         member.Addr,
+			Role:         toProtoRole(member.Role),
+			State:        toProtoMemberState(member.State),
+			AppliedIndex: member.AppliedIndex,
+			TargetIndex:  member.TargetIndex,
 		})
 	}
 	return &cluster.ClusterInfo{
-		LeaderId: info.LeaderID,
-		Members:  members,
+		LeaderId:        info.LeaderID,
+		LeaderAddr:      info.LeaderAddr,
+		LeaderAdminAddr: info.LeaderAdminAddr,
+		Members:         members,
+	}
+}
+
+func toProtoMemberState(state core.ClusterMemberState) cluster.ClusterMemberState {
+	switch state {
+	case core.ClusterMemberStateJoining:
+		return cluster.ClusterMemberState_CLUSTER_MEMBER_STATE_JOINING
+	case core.ClusterMemberStateCatchingUp:
+		return cluster.ClusterMemberState_CLUSTER_MEMBER_STATE_CATCHING_UP
+	case core.ClusterMemberStateVoter:
+		return cluster.ClusterMemberState_CLUSTER_MEMBER_STATE_VOTER
+	case core.ClusterMemberStateFailed:
+		return cluster.ClusterMemberState_CLUSTER_MEMBER_STATE_FAILED
+	default:
+		return cluster.ClusterMemberState_CLUSTER_MEMBER_STATE_UNSPECIFIED
 	}
 }
 

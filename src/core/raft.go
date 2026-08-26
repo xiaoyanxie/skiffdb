@@ -32,6 +32,9 @@ type RaftNode struct {
 	stores           *raftStores
 	hadExistingState bool
 	initialized      bool
+	membershipMu     sync.Mutex
+	joinProgressMu   sync.Mutex
+	joinProgress     map[raftpkg.ServerID]*memberJoinProgress
 	closeOnce        sync.Once
 	closeErr         error
 }
@@ -50,11 +53,25 @@ const (
 	ClusterRoleNonVoter
 )
 
+// ClusterMemberState describes a member's safe-join lifecycle.
+type ClusterMemberState int
+
+const (
+	ClusterMemberStateUnspecified ClusterMemberState = iota
+	ClusterMemberStateJoining
+	ClusterMemberStateCatchingUp
+	ClusterMemberStateVoter
+	ClusterMemberStateFailed
+)
+
 // ClusterMember represents a single node in the cluster configuration.
 type ClusterMember struct {
-	NodeID string
-	Addr   string
-	Role   ClusterRole
+	NodeID       string
+	Addr         string
+	Role         ClusterRole
+	State        ClusterMemberState
+	AppliedIndex uint64
+	TargetIndex  uint64
 }
 
 // ClusterInfo captures the leader and members for introspection responses.
@@ -74,15 +91,26 @@ type NotLeaderError struct {
 }
 
 const (
-	OpLeaderChanged       = "LEADER_CHANGED"
-	raftSnapshotThreshold = uint64(8192)
-	raftSnapshotInterval  = 2 * time.Minute
+	OpLeaderChanged          = "LEADER_CHANGED"
+	raftSnapshotThreshold    = uint64(8192)
+	raftSnapshotInterval     = 2 * time.Minute
+	raftJoinFailureTimeout   = 10 * time.Second
+	raftJoinRetryInterval    = 200 * time.Millisecond
+	raftJoinPromotionTimeout = 30 * time.Second
 	// Keep enough log tail to replay from the oldest regularly spaced retained
 	// snapshot if newer snapshots fail validation during restart.
 	raftSnapshotTrailingLogs = raftSnapshotThreshold * uint64(raftSnapshotRetention-1)
 	fsmSnapshotFormat        = "skiffdb-fsm"
 	fsmSnapshotVersion       = uint64(1)
 )
+
+var errJoinPromotionPending = errors.New("joining Raft member is still catching up")
+
+type memberJoinProgress struct {
+	targetIndex    uint64
+	appliedIndex   uint64
+	lastProgressAt time.Time
+}
 
 var leaderAdminAddr = ""
 
@@ -178,7 +206,7 @@ func StartRaft(ctx context.Context, config *Config) error {
 	} else if config.Bootstrap {
 		err = createNewCluster(node, config)
 	} else {
-		err = joinCluster(ctx, config)
+		err = joinCluster(ctx, node, config)
 	}
 	if err != nil {
 		closeErr := node.Close()
@@ -258,7 +286,7 @@ func createNewCluster(node *RaftNode, config *Config) error {
 	return nil
 }
 
-func joinCluster(ctx context.Context, config *Config) error {
+func joinCluster(ctx context.Context, node *RaftNode, config *Config) error {
 	sendRequest := func() error {
 		// init connection
 		log.Printf("Prepare to join cluster. Connecting to: %v ...", config.JoinAddr)
@@ -273,8 +301,9 @@ func joinCluster(ctx context.Context, config *Config) error {
 		client := cluster.NewClusterAdminClient(conn)
 		log.Println("Sending JoinClusterRequest.")
 		response, err := client.JoinCluster(ctx, &cluster.JoinClusterRequest{
-			NodeId: config.GetRaftId(),
-			Addr:   config.GetRaftAdvertiseAddr(),
+			NodeId:       config.GetRaftId(),
+			Addr:         config.GetRaftAdvertiseAddr(),
+			AppliedIndex: node.raft.AppliedIndex(),
 		})
 
 		// check error
@@ -286,7 +315,19 @@ func joinCluster(ctx context.Context, config *Config) error {
 		// check response
 		switch response.Code {
 		case cluster.JoinClusterResponseCode_SUCCESS:
-			return nil
+			if response.Cluster == nil {
+				return ErrInternal
+			}
+			for _, member := range response.Cluster.Members {
+				if member.GetNodeId() != config.GetRaftId() {
+					continue
+				}
+				if member.GetRole() == cluster.ClusterRole_CLUSTER_ROLE_VOTER {
+					return nil
+				}
+				return errJoinPromotionPending
+			}
+			return ErrInternal
 		case cluster.JoinClusterResponseCode_RAFT_NOT_ENABLED:
 			return retry.Unrecoverable(fmt.Errorf("fatal status: %v is not a raft node", config.JoinAddr))
 		case cluster.JoinClusterResponseCode_NOT_LEADER:
@@ -304,11 +345,14 @@ func joinCluster(ctx context.Context, config *Config) error {
 
 	err := retry.Do(
 		sendRequest,
-		retry.Attempts(5),
-		retry.Delay(500*time.Millisecond),
-		retry.DelayType(retry.BackOffDelay),
+		retry.Attempts(uint(raftJoinPromotionTimeout/raftJoinRetryInterval)+1),
+		retry.Delay(raftJoinRetryInterval),
+		retry.DelayType(retry.FixedDelay),
 		retry.Context(ctx),
 		retry.OnRetry(func(n uint, err error) {
+			if errors.Is(err, errJoinPromotionPending) {
+				return
+			}
 			log.Printf("attempt %d, reason:%v\n", n+1, err)
 			if nle, ok := err.(*NotLeaderError); ok {
 				log.Printf("Cluster leader changed from %s to %s. Will update the JoinAddr and try again.", config.JoinAddr, nle.LeaderAdminAddr)
@@ -372,6 +416,7 @@ func initRaftNodeWithDB(config *Config, stores *raftStores, db *MemDB) (*RaftNod
 		transport:        transport,
 		stores:           stores,
 		hadExistingState: hadExistingState,
+		joinProgress:     make(map[raftpkg.ServerID]*memberJoinProgress),
 	}, nil
 }
 
@@ -507,8 +552,17 @@ func observeClusterLeaderChange(ctx context.Context, node *RaftNode) {
 	}()
 }
 
-// JoinCluster registers a new node with the running raft cluster.
+// JoinCluster registers a new node as a non-voter. Callers that can report the
+// joining node's applied index should use JoinClusterWithProgress so it can be
+// promoted after catch-up.
 func JoinCluster(nodeID string, addr string) (*ClusterInfo, error) {
+	return JoinClusterWithProgress(nodeID, addr, 0)
+}
+
+// JoinClusterWithProgress registers a node as a non-voter and promotes it only
+// after the node reports that it has applied through the leader's frozen join
+// target. Repeating a request for the same ID/address pair is idempotent.
+func JoinClusterWithProgress(nodeID string, addr string, appliedIndex uint64) (*ClusterInfo, error) {
 	raftNodeMu.RLock()
 	defer raftNodeMu.RUnlock()
 	if raftNode == nil || raftNode.raft == nil {
@@ -524,40 +578,105 @@ func JoinCluster(nodeID string, addr string) (*ClusterInfo, error) {
 	if nodeID == "" || addr == "" {
 		return nil, fmt.Errorf("node id and address are required")
 	}
-	alreadyMember, err := validateJoiningMember(raftNode, nodeID, addr)
+
+	raftNode.membershipMu.Lock()
+	defer raftNode.membershipMu.Unlock()
+
+	member, configurationIndex, err := validateJoiningMember(raftNode, nodeID, addr)
 	if err != nil {
 		return nil, err
 	}
-	if alreadyMember {
+	if member != nil && member.Suffrage == raftpkg.Voter {
+		raftNode.clearJoinProgress(member.ID)
 		return buildClusterInfoForNode(raftNode)
 	}
-	// A normal SkiffDB HA deployment is a voter set. HashiCorp Raft stages and
-	// catches up the new voter before it can participate in quorum decisions.
-	future := raftNode.raft.AddVoter(raftpkg.ServerID(nodeID), raftpkg.ServerAddress(addr), 0, 30*time.Second)
-	if err := future.Error(); err != nil {
-		return nil, fmt.Errorf("add voter: %w", err)
+
+	wantedID := raftpkg.ServerID(nodeID)
+	wantedAddress := raftpkg.ServerAddress(addr)
+	if member == nil {
+		future := raftNode.raft.AddNonvoter(wantedID, wantedAddress, configurationIndex, raftJoinPromotionTimeout)
+		if err := future.Error(); err != nil {
+			return nil, fmt.Errorf("add non-voter: %w", err)
+		}
+		targetIndex := max(future.Index(), raftNode.raft.AppliedIndex())
+		raftNode.recordJoinProgress(wantedID, targetIndex, appliedIndex, time.Now())
+		return buildClusterInfoForNode(raftNode)
 	}
+
+	progress := raftNode.recordJoinProgress(wantedID, 0, appliedIndex, time.Now())
+	if appliedIndex < progress.targetIndex {
+		return buildClusterInfoForNode(raftNode)
+	}
+
+	future := raftNode.raft.AddVoter(wantedID, wantedAddress, configurationIndex, raftJoinPromotionTimeout)
+	if err := future.Error(); err != nil {
+		return nil, fmt.Errorf("promote voter: %w", err)
+	}
+	raftNode.clearJoinProgress(wantedID)
 	return buildClusterInfoForNode(raftNode)
 }
 
-func validateJoiningMember(node *RaftNode, nodeID, addr string) (bool, error) {
+func validateJoiningMember(node *RaftNode, nodeID, addr string) (*raftpkg.Server, uint64, error) {
 	future := node.raft.GetConfiguration()
 	if err := future.Error(); err != nil {
-		return false, fmt.Errorf("get configuration before join: %w", err)
+		return nil, 0, fmt.Errorf("get configuration before join: %w", err)
 	}
 	wantedID := raftpkg.ServerID(nodeID)
 	wantedAddress := raftpkg.ServerAddress(addr)
 	for _, server := range future.Configuration().Servers {
 		switch {
 		case server.ID == wantedID && server.Address == wantedAddress:
-			return true, nil
+			member := server
+			return &member, future.Index(), nil
 		case server.ID == wantedID:
-			return false, fmt.Errorf("Raft node identity %q is already registered at address %q", nodeID, server.Address)
+			return nil, 0, fmt.Errorf("Raft node identity %q is already registered at address %q", nodeID, server.Address)
 		case server.Address == wantedAddress:
-			return false, fmt.Errorf("Raft address %q is already registered to node %q", addr, server.ID)
+			return nil, 0, fmt.Errorf("Raft address %q is already registered to node %q", addr, server.ID)
 		}
 	}
-	return false, nil
+	return nil, future.Index(), nil
+}
+
+func (node *RaftNode) recordJoinProgress(id raftpkg.ServerID, targetIndex, appliedIndex uint64, now time.Time) memberJoinProgress {
+	node.joinProgressMu.Lock()
+	defer node.joinProgressMu.Unlock()
+	progress, ok := node.joinProgress[id]
+	if !ok {
+		if targetIndex == 0 {
+			targetIndex = node.raft.AppliedIndex()
+		}
+		progress = &memberJoinProgress{
+			targetIndex:    targetIndex,
+			lastProgressAt: now,
+		}
+		node.joinProgress[id] = progress
+	}
+	if appliedIndex > progress.appliedIndex {
+		progress.appliedIndex = appliedIndex
+		progress.lastProgressAt = now
+	}
+	return *progress
+}
+
+func (node *RaftNode) clearJoinProgress(id raftpkg.ServerID) {
+	node.joinProgressMu.Lock()
+	defer node.joinProgressMu.Unlock()
+	delete(node.joinProgress, id)
+}
+
+func (node *RaftNode) clusterMemberProgress(server raftpkg.Server, now time.Time) (ClusterMemberState, uint64, uint64) {
+	if server.Suffrage == raftpkg.Voter {
+		return ClusterMemberStateVoter, 0, 0
+	}
+	progress := node.recordJoinProgress(server.ID, 0, 0, now)
+	state := ClusterMemberStateJoining
+	if progress.appliedIndex > 0 {
+		state = ClusterMemberStateCatchingUp
+	}
+	if progress.appliedIndex < progress.targetIndex && now.Sub(progress.lastProgressAt) >= raftJoinFailureTimeout {
+		state = ClusterMemberStateFailed
+	}
+	return state, progress.appliedIndex, progress.targetIndex
 }
 
 // buildClusterInfo materialises the current configuration for RPC responses.
@@ -584,10 +703,14 @@ func buildClusterInfoForNode(node *RaftNode) (*ClusterInfo, error) {
 	}
 	info.Members = make([]ClusterMember, 0, len(config.Servers))
 	for _, srv := range config.Servers {
+		state, appliedIndex, targetIndex := node.clusterMemberProgress(srv, time.Now())
 		info.Members = append(info.Members, ClusterMember{
-			NodeID: string(srv.ID),
-			Addr:   string(srv.Address),
-			Role:   roleFromSuffrage(srv.Suffrage),
+			NodeID:       string(srv.ID),
+			Addr:         string(srv.Address),
+			Role:         roleFromSuffrage(srv.Suffrage),
+			State:        state,
+			AppliedIndex: appliedIndex,
+			TargetIndex:  targetIndex,
 		})
 	}
 	return info, nil

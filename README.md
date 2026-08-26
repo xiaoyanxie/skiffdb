@@ -144,6 +144,23 @@ durable Raft snapshot synchronously and reports an error unless it completes.
 Graceful shutdown stops Raft first, then closes its TCP transport and bbolt
 store.
 
+#### Joining and voter promotion
+
+A new member is first committed to the Raft configuration as a non-voter, so a
+slow or unreachable process cannot increase the quorum requirement. While
+joining, the process reports its local Raft applied index to the leader. The
+leader freezes a target index when it adds the non-voter and promotes the member
+with a second configuration change only after the reported index reaches that
+target. `StartRaft` does not finish the initial join until promotion succeeds.
+
+Repeated join requests for the same node ID and advertised address are safe.
+Reusing either an ID or an address with a different counterpart is rejected.
+Cluster information returned by the admin join RPC includes each member's
+`joining`, `catching_up`, `voter`, or `failed` state plus the reported applied
+and target indexes. A non-voter with no index progress for 10 seconds is shown
+as failed and remains outside the voting quorum; restoring connectivity allows
+its subsequent progress reports to resume the same join.
+
 #### Restarting one member
 
 Stop the process cleanly when possible, retain its complete `--data-dir`, and

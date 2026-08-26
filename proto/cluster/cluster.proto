@@ -7,6 +7,7 @@ option go_package = "github.com/fanyi-zhao/skiffdb/proto/cluster";
 message JoinClusterRequest {
   string node_id = 1;
   string addr = 2;
+  uint64 applied_index = 3;
 }
 
 message JoinClusterResponse {
@@ -25,6 +26,9 @@ message ClusterMember {
   string node_id = 1;
   string addr = 2;
   ClusterRole role = 3;
+  ClusterMemberState state = 4;
+  uint64 applied_index = 5;
+  uint64 target_index = 6;
 }
 
 enum JoinClusterResponseCode {
@@ -37,6 +41,14 @@ enum ClusterRole {
   CLUSTER_ROLE_UNSPECIFIED = 0;
   CLUSTER_ROLE_VOTER = 1;
   CLUSTER_ROLE_NON_VOTER = 2;
+}
+
+enum ClusterMemberState {
+  CLUSTER_MEMBER_STATE_UNSPECIFIED = 0;
+  CLUSTER_MEMBER_STATE_JOINING = 1;
+  CLUSTER_MEMBER_STATE_CATCHING_UP = 2;
+  CLUSTER_MEMBER_STATE_VOTER = 3;
+  CLUSTER_MEMBER_STATE_FAILED = 4;
 }
 
 service ClusterAdmin {
