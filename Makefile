@@ -4,7 +4,7 @@ CMD_PATH := ./
 BUILD_DIR := ./
 
 .PHONY: all build clean run test proto benchmark-smoke benchmark-full benchmark-test \
-	microk8s-image microk8s-deploy microk8s-status microk8s-benchmark microk8s-restart-follower microk8s-failover microk8s-clean
+	microk8s-image microk8s-deploy microk8s-status microk8s-benchmark microk8s-benchmark-formal microk8s-restart-follower microk8s-failover microk8s-clean
 
 all: build test
 
@@ -50,6 +50,9 @@ microk8s-status:
 
 microk8s-benchmark:
 	./scripts/microk8s.sh benchmark
+
+microk8s-benchmark-formal:
+	./scripts/microk8s.sh benchmark-formal
 
 microk8s-restart-follower:
 	./scripts/microk8s.sh restart-follower

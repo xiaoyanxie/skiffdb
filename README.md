@@ -311,6 +311,21 @@ Run the remote smoke workload and keep its artifacts under
 make microk8s-benchmark
 ```
 
+For a repeatable local performance sample, run five 60-second repetitions of
+the 95% GET / 5% SET, 64-byte workload. The StatefulSet limits each SkiffDB pod
+to 2 CPUs and 1 GiB of memory, and each result directory also receives
+`kubernetes-top.tsv`, `kubernetes-pods.txt`, and `kubernetes-nodes.txt`:
+
+```bash
+make microk8s-benchmark-formal
+```
+
+The repetition count, measured duration, warm-up, concurrency, key count, and
+initial seed can be overridden with `SKIFFDB_BENCHMARK_RUNS`,
+`SKIFFDB_BENCHMARK_DURATION`, `SKIFFDB_BENCHMARK_WARMUP`,
+`SKIFFDB_BENCHMARK_CONCURRENCY`, `SKIFFDB_BENCHMARK_KEYS`, and
+`SKIFFDB_BENCHMARK_SEED`. Keep these settings identical when comparing runs.
+
 The remote CLI can also target explicit RESP endpoints without owning their
 processes:
 

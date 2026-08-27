@@ -11,6 +11,7 @@ TARGETS=""
 BENCH_BIN=""
 WORK_DIR=""
 FORWARD_PIDS=()
+SAMPLER_PID=""
 
 usage() {
   cat <<'USAGE'
@@ -21,6 +22,10 @@ Commands:
   deploy             Build the image and deploy/wait for the three-node cluster
   status             Show StatefulSet, Pod, PVC, Service, and PDB status
   benchmark [flags]  Run the remote smoke benchmark from the host
+  benchmark-formal   Run five 60-second mixed-workload repetitions and sample
+                     Kubernetes CPU/memory usage (override with
+                     SKIFFDB_BENCHMARK_RUNS, _DURATION, _WARMUP, _CONCURRENCY,
+                     _KEYS, and _SEED)
   restart-follower   Delete a follower, write while it is down, and verify catch-up
   failover           Delete the leader and measure time to a new writable leader
   logs               Print logs from all SkiffDB pods
@@ -98,7 +103,16 @@ stop_forwards() {
   FORWARD_PIDS=()
 }
 
+stop_sampler() {
+  if [[ -n "${SAMPLER_PID}" ]]; then
+    kill "${SAMPLER_PID}" >/dev/null 2>&1 || true
+    wait "${SAMPLER_PID}" >/dev/null 2>&1 || true
+    SAMPLER_PID=""
+  fi
+}
+
 cleanup() {
+  stop_sampler
   stop_forwards
   if [[ -n "${WORK_DIR}" && "${WORK_DIR}" == /tmp/skiffdb-microk8s.* ]]; then
     rm -rf -- "${WORK_DIR}"
@@ -181,8 +195,76 @@ benchmark() {
     "$@")
 }
 
+sample_pod_resources() {
+  local output="$1"
+  printf 'timestamp_utc\tpod\tcpu\tmemory\n' >"${output}"
+  while true; do
+    local timestamp
+    timestamp="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
+    while read -r pod cpu memory; do
+      if [[ -n "${pod}" ]]; then
+        printf '%s\t%s\t%s\t%s\n' "${timestamp}" "${pod}" "${cpu}" "${memory}"
+      fi
+    done < <(kube -n "${NAMESPACE}" top pods --no-headers 2>/dev/null || true)
+    sleep 1
+  done >>"${output}"
+}
+
+benchmark_formal() {
+  local runs="${SKIFFDB_BENCHMARK_RUNS:-5}"
+  local duration="${SKIFFDB_BENCHMARK_DURATION:-60s}"
+  local warmup="${SKIFFDB_BENCHMARK_WARMUP:-10s}"
+  local concurrency="${SKIFFDB_BENCHMARK_CONCURRENCY:-8}"
+  local keys="${SKIFFDB_BENCHMARK_KEYS:-4096}"
+  local base_seed="${SKIFFDB_BENCHMARK_SEED:-1}"
+  if [[ ! "${runs}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "SKIFFDB_BENCHMARK_RUNS must be a positive integer" >&2
+    exit 2
+  fi
+
+  build_bench
+  start_forwards
+  mkdir -p "${ROOT_DIR}/${RESULTS_ROOT}"
+
+  local run seed resource_log output result_dir result_path
+  for run in $(seq 1 "${runs}"); do
+    seed=$((base_seed + run - 1))
+    resource_log="${WORK_DIR}/kubernetes-top-${run}.tsv"
+    echo "Formal benchmark ${run}/${runs}: duration=${duration}, warmup=${warmup}, concurrency=${concurrency}, keys=${keys}, seed=${seed}"
+    sample_pod_resources "${resource_log}" &
+    SAMPLER_PID="$!"
+    if ! output="$(cd "${ROOT_DIR}" && "${BENCH_BIN}" remote \
+      --targets "${TARGETS}" \
+      --deployment durable-three-voter \
+      --profile smoke \
+      --duration "${duration}" \
+      --warmup "${warmup}" \
+      --concurrency "${concurrency}" \
+      --pipeline 1 \
+      --keys "${keys}" \
+      --seed "${seed}" \
+      --results "${RESULTS_ROOT}")"; then
+      stop_sampler
+      printf '%s\n' "${output}"
+      return 1
+    fi
+    stop_sampler
+    printf '%s\n' "${output}"
+    result_dir="$(printf '%s\n' "${output}" | awk '$1 == "results:" {print $2}')"
+    result_path="${ROOT_DIR}/${result_dir}"
+    if [[ "${result_dir}" != "${RESULTS_ROOT}/"* || ! -d "${result_path}" ]]; then
+      echo "could not identify benchmark result directory from: ${output}" >&2
+      return 1
+    fi
+    cp "${resource_log}" "${result_path}/kubernetes-top.tsv"
+    kube -n "${NAMESPACE}" get pods -o wide >"${result_path}/kubernetes-pods.txt"
+    kube get node -o wide >"${result_path}/kubernetes-nodes.txt"
+  done
+}
+
 restart_follower() {
   build_bench
+
   start_forwards
   local leader follower pod old_uid marker marker_value follower_port
   leader="$(leader_index)"
@@ -253,6 +335,7 @@ main() {
     deploy) deploy ;;
     status) status ;;
     benchmark) benchmark "$@" ;;
+    benchmark-formal) benchmark_formal ;;
     restart-follower) restart_follower ;;
     failover) failover ;;
     logs) kube -n "${NAMESPACE}" logs statefulset/skiffdb --all-pods=true ;;
