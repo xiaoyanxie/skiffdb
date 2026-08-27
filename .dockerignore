@@ -1,0 +1,5 @@
+.git
+.gocache
+benchmarks/results
+skiffdb-server
+*.md

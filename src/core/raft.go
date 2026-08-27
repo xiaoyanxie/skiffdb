@@ -181,7 +181,6 @@ func StartRaft(ctx context.Context, config *Config) error {
 		_ = stores.Close()
 		return err
 	}
-	config.RaftAdvertiseAddr = string(node.transport.LocalAddr())
 	if hadPersistedIdentity && identity.AdvertiseAddr != config.GetRaftAdvertiseAddr() {
 		closeErr := node.Close()
 		return errors.Join(fmt.Errorf("Raft advertised address %q conflicts with persisted address %q; remove and re-add the member with a new identity to change its advertised address", config.GetRaftAdvertiseAddr(), identity.AdvertiseAddr), closeErr)
@@ -220,7 +219,7 @@ func StartRaft(ctx context.Context, config *Config) error {
 		}
 	}
 	if !hadPersistedIdentity {
-		if err := persistRaftIdentity(config, string(node.transport.LocalAddr())); err != nil {
+		if err := persistRaftIdentity(config, config.GetRaftAdvertiseAddr()); err != nil {
 			closeErr := node.Close()
 			return errors.Join(err, closeErr)
 		}
@@ -277,7 +276,7 @@ func createNewCluster(node *RaftNode, config *Config) error {
 		{
 			Suffrage: raftpkg.Voter,
 			ID:       *node.localID,
-			Address:  node.transport.LocalAddr(),
+			Address:  raftpkg.ServerAddress(config.GetRaftAdvertiseAddr()),
 		},
 	}})
 	if err := confFuture.Error(); err != nil {
@@ -432,7 +431,7 @@ func normalizeRaftAdvertiseAddr(address string) (string, error) {
 	if resolved.IP == nil || resolved.IP.IsUnspecified() {
 		return "", fmt.Errorf("Raft advertised address %q is not routable; set --raft-advertise-addr to a peer-reachable address", address)
 	}
-	return resolved.String(), nil
+	return address, nil
 }
 
 func validateRaftStartupIntent(config *Config, initialized bool) error {

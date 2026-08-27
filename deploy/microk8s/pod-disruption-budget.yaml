@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: skiffdb
+  labels:
+    app.kubernetes.io/name: skiffdb
+    app.kubernetes.io/part-of: skiffdb-benchmark
+    app.kubernetes.io/managed-by: skiffdb-microk8s
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: skiffdb
+      app.kubernetes.io/part-of: skiffdb-benchmark

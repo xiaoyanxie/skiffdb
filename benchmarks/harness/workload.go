@@ -30,7 +30,7 @@ func executeWorkload(ctx context.Context, addr string, deployment Deployment, wo
 		Concurrency: opts.Concurrency, Pipeline: opts.PipelineDepth, Seed: opts.Seed,
 	}
 	value := strings.Repeat("v", workload.ValueSize)
-	if err := preloadKeys(addr, value); err != nil {
+	if err := preloadKeys(addr, value, opts.KeyCount); err != nil {
 		return result, hookTiming{}, fmt.Errorf("preload keys: %w", err)
 	}
 	if opts.Warmup > 0 {
@@ -84,13 +84,16 @@ func executeWorkload(ctx context.Context, addr string, deployment Deployment, wo
 	return result, timing, phaseErr
 }
 
-func preloadKeys(addr, value string) error {
+func preloadKeys(addr, value string, keyCount int) error {
+	if keyCount <= 0 {
+		return fmt.Errorf("key count must be positive")
+	}
 	client, err := dialRESP(addr, 2*time.Second)
 	if err != nil {
 		return err
 	}
 	defer client.close()
-	for i := 0; i < 256; i++ {
+	for i := 0; i < keyCount; i++ {
 		response, err := client.command("SET", fmt.Sprintf("bench:%d", i), value)
 		if err != nil {
 			return err
@@ -126,7 +129,7 @@ func runWorkloadPhase(ctx context.Context, addr string, workload Workload, value
 				_ = client.conn.SetDeadline(time.Now().Add(10 * time.Second))
 				for i := 0; i < opts.PipelineDepth; i++ {
 					isGet := rng.Intn(100) < workload.GetPercent
-					key := fmt.Sprintf("bench:%d", rng.Intn(256))
+					key := fmt.Sprintf("bench:%d", rng.Intn(opts.KeyCount))
 					started := time.Now()
 					var writeErr error
 					if isGet {

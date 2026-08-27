@@ -363,11 +363,11 @@ func collectMetadata(options Options) (Metadata, error) {
 	metadata := Metadata{
 		SchemaVersion: SchemaVersion, HarnessVersion: HarnessVersion, StartTime: time.Now().UTC(), GitCommit: strings.TrimSpace(string(shaOutput)), GitDirty: len(statusOutput) > 0,
 		BuildCommand: options.BuildCommand, GoVersion: runtime.Version(), OS: runtime.GOOS, Architecture: runtime.GOARCH, CPUCount: runtime.NumCPU(),
-		StoragePath: options.ResultsRoot, RandomSeed: options.Seed, Profile: options.Profile, HotRequestLogging: false,
+		StoragePath: options.ResultsRoot, RandomSeed: options.Seed, Profile: options.Profile, Orchestration: options.Orchestration, HotRequestLogging: false,
 		Parameters: map[string]any{
 			"duration_ms": millis(options.Duration), "warmup_ms": millis(options.Warmup),
 			"concurrency": options.Concurrency, "pipeline_depth": options.PipelineDepth,
-			"key_distribution": "uniform", "key_count": 256,
+			"key_distribution": "uniform", "key_count": options.KeyCount,
 		},
 	}
 	metadata.AvailableMemory = availableMemory()

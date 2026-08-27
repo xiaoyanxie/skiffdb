@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: skiffdb-benchmark
+  labels:
+    app.kubernetes.io/name: skiffdb
+    app.kubernetes.io/part-of: skiffdb-benchmark
+    app.kubernetes.io/managed-by: skiffdb-microk8s

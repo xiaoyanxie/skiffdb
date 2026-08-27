@@ -129,6 +129,9 @@ address replacement is not supported by the current membership API and is
 tracked separately; restore the original address rather than editing
 `node.json` or the Raft database manually.
 
+DNS names are validated at startup but persisted verbatim, so StatefulSet DNS
+identities remain stable when a replacement pod receives a different IP.
+
 Raft log and stable-state writes use `raft-boltdb/v2` with `NoSync=false`.
 Consequently, each completed bbolt write transaction synchronizes the database
 file before returning to Raft. SkiffDB does not acknowledge a successful Raft
@@ -212,7 +215,7 @@ Run:
 
 ## Build from source
 ### Prereqs
-- Go 1.22+
+- Go 1.23+
 - (Optional) make, redis-cli, Prometheus/Grafana for metrics
 
 ### Build
@@ -278,6 +281,79 @@ go run ./benchmarks/cmd/skiffdb-bench compare \
   --output benchmarks/comparison \
   benchmarks/results/BASELINE benchmarks/results/CANDIDATE
 ```
+
+### Local MicroK8s deployment benchmark
+
+The MicroK8s workflow deploys three durable Raft voters as a StatefulSet. Each
+pod has a stable Raft identity and DNS address plus its own persistent volume.
+The benchmark client runs on the host through three tracked port-forwards, so
+result bundles survive benchmark pod or server pod replacement.
+
+Prerequisites:
+
+- A running MicroK8s installation with the `dns`, `hostpath-storage`, and
+  `registry` addons enabled.
+- Docker configured to push to the MicroK8s registry at `localhost:32000`.
+- The Go and protobuf tools required by the normal source build.
+
+Build the image, push it to the local registry, deploy the cluster, and wait for
+all members:
+
+```bash
+make microk8s-deploy
+make microk8s-status
+```
+
+Run the remote smoke workload and keep its artifacts under
+`benchmarks/results/microk8s/`:
+
+```bash
+make microk8s-benchmark
+```
+
+For a repeatable local performance sample, run five 60-second repetitions of
+the 95% GET / 5% SET, 64-byte workload. The StatefulSet limits each SkiffDB pod
+to 2 CPUs and 1 GiB of memory, and each result directory also receives
+`kubernetes-top.tsv`, `kubernetes-pods.txt`, and `kubernetes-nodes.txt`:
+
+```bash
+make microk8s-benchmark-formal
+```
+
+The repetition count, measured duration, warm-up, concurrency, key count, and
+initial seed can be overridden with `SKIFFDB_BENCHMARK_RUNS`,
+`SKIFFDB_BENCHMARK_DURATION`, `SKIFFDB_BENCHMARK_WARMUP`,
+`SKIFFDB_BENCHMARK_CONCURRENCY`, `SKIFFDB_BENCHMARK_KEYS`, and
+`SKIFFDB_BENCHMARK_SEED`. Keep these settings identical when comparing runs.
+
+The remote CLI can also target explicit RESP endpoints without owning their
+processes:
+
+```bash
+go run ./benchmarks/cmd/skiffdb-bench remote \
+  --targets 10.0.0.11:6379,10.0.0.12:6379,10.0.0.13:6379 \
+  --deployment durable-three-voter \
+  --profile smoke --keys 4096
+```
+
+Exercise PVC-backed follower restart/catch-up and leader election independently:
+
+```bash
+make microk8s-restart-follower
+make microk8s-failover
+```
+
+Cleanup is namespace-scoped and refuses to delete a namespace unless it has the
+expected `app.kubernetes.io/managed-by=skiffdb-microk8s` label:
+
+```bash
+make microk8s-clean
+```
+
+> MicroK8s here is a single-host deployment and recovery environment. Its
+> port-forwarded latency and throughput are not multi-host, AWS, or production
+> performance results. Use the remote CLI against isolated hosts for publishable
+> distributed-system measurements.
 
 Only compare runs from the same host with identical workload parameters. In
 particular, never present the in-memory baseline and durable Raft modes as

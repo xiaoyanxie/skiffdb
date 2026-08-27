@@ -68,7 +68,13 @@ func (o *Options) setDefaults() {
 	if o.PipelineDepth <= 0 {
 		o.PipelineDepth = 1
 	}
+	if o.KeyCount <= 0 {
+		o.KeyCount = 256
+	}
 	if o.Seed == 0 {
 		o.Seed = 1
+	}
+	if o.Orchestration == "" {
+		o.Orchestration = "local-process"
 	}
 }
